@@ -170,7 +170,7 @@ class MyCustomAlgorithm(BaseAlgorithm):
         return action
 ```
 
-选手的项目文件中只需要包括`team_algorithm.py`和所需算法或模型文件，不需要`env.py`,`fr5_description`等环境文件，打包并命名为"队伍名称.zip"提交。
+选手的项目文件中只需要包括`team_algorithm.py`和所需算法或模型文件，不需要`env.py`,`fr5_description`等环境文件，打包为"zip"文件提交。
 
 例如：
 ```
