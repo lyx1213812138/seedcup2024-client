@@ -22,7 +22,9 @@
 - **目标物体**：圆柱体，只要机械臂夹爪的中心离目标中心在0.05m以内，即视为抓取成功。
 - **障碍物**：0.1m半径的小球。
 
-![alt text](image.png)
+<p align="center">
+  <img src="image.png" alt="alt text" width="200"/>
+</p>
 
 ### 环境参数
 
