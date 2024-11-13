@@ -67,7 +67,7 @@
 ### 必要依赖
 
 - stable_baselines3
-- numpy==1.26.4
+- numpy < 2
 - scipy
 - pybullet
 
