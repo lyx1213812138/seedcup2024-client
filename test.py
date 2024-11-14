@@ -1,8 +1,8 @@
-from env import Env
-from team_algorithm import PPOAlgorithm, MyCustomAlgorithm
+from env.env import Env
+from team_algorithm import PPOAlgorithm, MyCustomAlgorithm, TriangleAlgorithm
 
 def main(algorithm):
-    env = Env(is_senior=True,seed=100,gui=False)
+    env = Env(is_senior=False,seed=100,gui=True)
     done = False
     num_episodes = 100
     final_score = 0
@@ -38,5 +38,5 @@ def main(algorithm):
 
 if __name__ == "__main__":
     algorithm = PPOAlgorithm()
-    # algorithm = MyCustomAlgorithm()
+    # algorithm = TriangleAlgorithm()
     main(algorithm)
