@@ -6,12 +6,10 @@ import math
 from pybullet_utils import bullet_client
 from scipy.spatial.transform import Rotation as R
 import gymnasium as gym
-from ccalc import Calc
-
-calc = Calc()
+# import calc
 
 class Env:
-    def __init__(self,is_senior=False,seed=565, gui=False):
+    def __init__(self,is_senior=False,seed=100, gui=False):
         self.unwrapped = self
         self.seed = seed
         self.is_senior = is_senior
@@ -22,8 +20,7 @@ class Env:
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
         self.action_space = gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float64)
-        # XXX observation space
-        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(1, 42), dtype=np.float64)
+        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(1, 15), dtype=np.float64)
         self.metadata = {'render.modes': []}
 
         self.init_env()
@@ -49,16 +46,23 @@ class Env:
         self.last_dis = -1
         self.total_reward = 0
         neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
+        # neutral_angle = [-49.45849125928217, -155.601209583849, -36, -164.0052115563118, 0, 0, 0, 0]
         neutral_angle = [x * math.pi / 180 for x in neutral_angle]
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=neutral_angle)
 
         self.goalx = np.random.uniform(-0.2, 0.2, 1)
+        # # self.goalx = np.array([0])
         self.goaly = np.random.uniform(0.8, 0.9, 1)
         self.goalz = np.random.uniform(0.1, 0.3, 1)
+        # self.goalx = np.random.uniform(goal['x'][0], goal['x'][1], 1)
+        # self.goaly = np.random.uniform(goal['y'][0], goal['y'][1], 1)
+        # self.goalz = np.random.uniform(goal['z'][0], goal['z'][1], 1)
         self.target_position = [self.goalx[0], self.goaly[0], self.goalz[0]]
         self.p.resetBasePositionAndOrientation(self.target, self.target_position, [0, 0, 0, 1])
 
         self.obstacle1_position = [np.random.uniform(-0.2, 0.2, 1) + self.goalx[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
+        # self.obstacle1_position = [0, 0.6, np.random.uniform(0.2, 0.2, 1)]
+        # self.obstacle1_position = [np.random.uniform(obstacle['x'][0], obstacle['x'][1], 1) + self.goalx[0], 0.6, np.random.uniform(obstacle['z'][0], obstacle['z'][1], 1)]
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
         for _ in range(100):
             self.p.stepSimulation()
@@ -70,18 +74,8 @@ class Env:
         obs_joint_angles = ((np.array(joint_angles, dtype=np.float32) / 180) + 1) / 2
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         obstacle1_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
-
-        # XXX observation        
-        self.observation = np.hstack((
-            obs_joint_angles, 
-            target_position, obstacle1_position, 
-            calc.LastPos(obs_joint_angles), 
-            calc.WristPos(obs_joint_angles),
-            calc.jointPos(obs_joint_angles),
-            calc.idlePos(target_position, obstacle1_position)
-        )).flatten().reshape(1, -1)
-        # print('obs: ', self.observation, self.observation.shape)
-        
+        self.observation = np.hstack((obs_joint_angles, target_position, obstacle1_position, calc.LastPos(obs_joint_angles))).flatten().reshape(1, -1)
+        print('obs: ', self.observation, self.observation.shape)
         return self.observation
 
     def step(self, action):
@@ -113,22 +107,7 @@ class Env:
         return np.linalg.norm(gripper_centre_pos - target_position)
 
     def reward(self):
-        reward = 0
-
-        # 计算距离reward
-        total_dis = self.get_dis() #+ self.get_idlepos_dis()
-        # obs = self.get_observation()
-        # total_dis = np.linalg.norm(   obs[0][0:6] - obs[0][36:42])
-        # print('dis: ', tota   l_dis)
-        if self.last_dis < 0:
-            reward = 0
-        else:
-            reward = 2000*(self.last_dis - total_dis)
-            # print("dis_reward: ", reward) 0.0? - ?.?
-        self.last_dis = total_dis
-
-        # XXX 接近障碍物
-        reward -= calc.near_obs(self.get_observation())
+        reward_score = 0
 
         # 获取与桌子和障碍物的接触点
         table_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.table)
@@ -138,13 +117,12 @@ class Env:
             link_index = contact_point[3]
             if link_index not in [0, 1]:
                 if not self.obstacle_contact:
+                    reward_score = - 200
                     print('touch obstacle!')
-                    reward = -300
-                    # XXX contact
                 self.obstacle_contact = True
-                reward = -5
 
-        # 计算结束
+        # 计算奖励
+        # print('step num: ', self.step_num)
         if self.get_dis() < 0.05 and self.step_num <= self.max_steps:
             self.success_reward = 100
             if self.obstacle_contact:
@@ -154,12 +132,8 @@ class Env:
                     self.success_reward = 50
                 else:
                     return 
-            # if self.obstacle_contact:
-            #     reward = 400
-            # else:
-            #     reward = 1000
+            reward_score = 1000
             self.terminated = True
-            # XXX reach target
             print("Terminated for reaching target")
 
         elif self.step_num >= self.max_steps:
@@ -174,19 +148,22 @@ class Env:
                 elif not self.is_senior:
                     self.success_reward *= 0.5
                     
-            reward = self.success_reward * 10
-            # if self.success_reward < 30:
-            #     reward = -300
+            reward_score = - 100
             self.terminated = True
-            # XXX reach max steps
-            print("Terminated for reaching max steps, dis: ", self.get_dis(), 
-                  'total_reward: ', self.total_reward, 
-                  'idlepos_dis', total_dis)
+            print("Terminated for reaching max steps, dis: ", self.get_dis(), 'total_reward: ', self.total_reward)
 
+        total_dis = self.get_dis() + 0.1 * self.get_idlepos_dis()
+        if self.last_dis < 0:
+            dis_reward = 0
+        else:
+            dis_reward = 1000*(self.last_dis - total_dis)
+        self.last_dis = total_dis
+        # print('traditional dis: ', self.get_dis(), 'idlepos dis: ', self.get_idlepos_dis())
+        # print('dis: ', total_dis, 'dis_reward: ', dis_reward)
+        reward = reward_score + dis_reward
         self.total_reward += reward
 
-        # XXX calc reward
-        return reward
+        return reward * (0.5 if self.obstacle_contact else 1)
 
 
     def reset_episode(self):
@@ -202,4 +179,43 @@ class Env:
     def _get_reward(self):
         return 
 
-    
+    def get_idlepos_dis(self):
+        a = self.get_observation()[0][:6]
+        t = self.get_observation()[0][6:9]
+        o = self.get_observation()[0][9:]
+        r = 0.9
+        l1 = 0.865 * r
+        l2 = 0.225 * r
+        l3 = 0.121  * r
+        l4 = 0.168 * r
+        a_t_n3 = -60*(t[2]**4)+51.3333*(t[2]**3)-15.65*(t[2]**2)+2.161*t[2]-0.045
+        l = np.sqrt(l1 ** 2 + l3 ** 2)
+        s = np.sqrt(l ** 2 + l4 ** 2)
+        l = s * np.cos(a_t_n3 * math.pi / 2)
+        d = np.sqrt(t[0] ** 2 + t[1] ** 2)
+        if l + l2 < d: d = l + l2 - 0.0000001
+        a1 = math.acos((d**2 + l**2 - l2**2) / (2 * d * l))
+        a2 = np.arctan2(t[1], t[0])
+        oa = np.arctan2(o[1], o[0])
+        a3 = np.arctan2(l3, l1)
+        a_t_n = 0
+        a_t_n2 = 0
+        if o[0] > t[0] - 0.1:
+            if oa > a2 + 0.01:
+                a_t = a2 - a1 + a3
+            else:
+                a_t = a1 + a2 + a3
+            a_t_n = (a_t / math.pi) / 2%1
+            #print(a1, a2, a3)
+
+            # action[4]
+            a4 = math.acos((l**2 + l2**2 - d**2) / (2 * l * l2))
+            if oa > a2 + 0.01:
+                a_t_2 = math.pi/2+a4+a3
+            else:
+                a_t_2 = math.pi/2-a4+a3
+            a_t_n2 = (a_t_2/math.pi + 1)/2%1
+
+        target = np.array([a_t_n, 0.07, 0.40097904, 0.04461199, a_t_n2, 0.5])
+
+        return np.sum((a - target) ** 2)

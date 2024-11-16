@@ -1,5 +1,5 @@
-from env.env import Env
-from team_algorithm import PPOAlgorithm, MyCustomAlgorithm, TriangleAlgorithm
+from std_env import Env
+from team_algorithm import MyCustomAlgorithm, TriangleAlgorithm
 import numpy as np
 from time import sleep, time
 from pynput import keyboard
@@ -9,21 +9,27 @@ pause = False
 
 def main(algorithm):
     global pause, env
-    env = Env(is_senior=False,seed=100,gui=True)
-    env.reset()
+    env = Env(is_senior=False,seed=10430,gui=True)
     done = False
-    while not done:
+    printed = True
+    while True:
         if pause:
             # print('Paused')
             sleep(0.5)
             continue
-        observation = env.get_observation()
-        action = algorithm.get_action(observation)
-        obs = env.step(action)
-        sleep(0.05)
+        if not done:
+            observation = env.get_observation()
+            action = algorithm.get_action(observation)
+            obs = env.step(action)
+            sleep(0.05)
 
         # Check if the episode has ended
         done = env.terminated
+        if done:
+            print(f"Test completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", env.success_reward)
+            sleep(1)
+            env.reset()
+            done = False
 
 
 def on_press(key):
@@ -50,7 +56,7 @@ def dokeyboard():
         listener.join()
 
 if __name__ == "__main__":
-    algorithm = PPOAlgorithm()
+    algorithm = MyCustomAlgorithm()
     # algorithm = TriangleAlgorithm()
     t = threading.Thread(target=dokeyboard)
     t.start()

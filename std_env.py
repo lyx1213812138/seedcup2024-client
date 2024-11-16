@@ -5,14 +5,9 @@ import pybullet_data
 import math
 from pybullet_utils import bullet_client
 from scipy.spatial.transform import Rotation as R
-import gymnasium as gym
-from ccalc import Calc
-
-calc = Calc()
 
 class Env:
-    def __init__(self,is_senior=False,seed=565, gui=False):
-        self.unwrapped = self
+    def __init__(self,is_senior,seed, gui=False):
         self.seed = seed
         self.is_senior = is_senior
         self.step_num = 0
@@ -20,16 +15,10 @@ class Env:
         self.p = bullet_client.BulletClient(connection_mode=p.GUI if gui else p.DIRECT)
         self.p.setGravity(0, 0, -9.81)
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
-
-        self.action_space = gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float64)
-        # XXX observation space
-        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(1, 42), dtype=np.float64)
-        self.metadata = {'render.modes': []}
-
         self.init_env()
 
     def init_env(self):
-        # np.random.seed(self.seed)  
+        np.random.seed(self.seed)  
         self.fr5 = self.p.loadURDF("fr5_description/urdf/fr5v6.urdf", useFixedBase=True, basePosition=[0, 0, 0],
                                    baseOrientation=p.getQuaternionFromEuler([0, 0, np.pi]), flags=p.URDF_USE_SELF_COLLISION)
         self.table = self.p.loadURDF("table/table.urdf", basePosition=[0, 0.5, -0.63],
@@ -40,14 +29,11 @@ class Env:
         self.obstacle1 = self.p.createMultiBody(baseMass=0, baseCollisionShapeIndex=collision_obstacle_id, basePosition=[0.5, 0.5, 2])
         self.reset()
 
-    # def reset(self, goal={'x': (-0.2, 0.2), 'y': (0.8, 0.9), 'z': (0.1, 0.3)}, obstacle={'x': (-0.2, 0.2), 'z': (0.1, 0.3)}, seed, options):
-    def reset(self, seed = None, options = None):
+    def reset(self):
         self.step_num = 0
         self.success_reward = 0
         self.terminated = False
-        self.obstacle_contact = False   
-        self.last_dis = -1
-        self.total_reward = 0
+        self.obstacle_contact = False
         neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
         neutral_angle = [x * math.pi / 180 for x in neutral_angle]
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=neutral_angle)
@@ -63,25 +49,14 @@ class Env:
         for _ in range(100):
             self.p.stepSimulation()
 
-        return (self.get_observation(), self._get_info())
+        return self.get_observation()
 
     def get_observation(self):
         joint_angles = [self.p.getJointState(self.fr5, i)[0] * 180 / np.pi for i in range(1, 7)]
         obs_joint_angles = ((np.array(joint_angles, dtype=np.float32) / 180) + 1) / 2
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         obstacle1_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
-
-        # XXX observation        
-        self.observation = np.hstack((
-            obs_joint_angles, 
-            target_position, obstacle1_position, 
-            calc.LastPos(obs_joint_angles), 
-            calc.WristPos(obs_joint_angles),
-            calc.jointPos(obs_joint_angles),
-            calc.idlePos(target_position, obstacle1_position)
-        )).flatten().reshape(1, -1)
-        # print('obs: ', self.observation, self.observation.shape)
-        
+        self.observation = np.hstack((obs_joint_angles, target_position, obstacle1_position)).flatten().reshape(1, -1)
         return self.observation
 
     def step(self, action):
@@ -94,14 +69,13 @@ class Env:
         fr5_joint_angles = np.array(joint_angles) + (np.array(action[:6]) / 180 * np.pi)
         gripper = np.array([0, 0])
         angle_now = np.hstack([fr5_joint_angles, gripper])
-        reward = self.reward()
+        self.reward()
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=angle_now)
 
         for _ in range(20):
             self.p.stepSimulation()
 
-        return (self.get_observation(), reward, self.terminated, self.terminated, self._get_info())
-        # return self.observation
+        return self.observation
 
     def get_dis(self):
         gripper_pos = self.p.getLinkState(self.fr5, 6)[0]
@@ -109,27 +83,11 @@ class Env:
         rotation = R.from_quat(self.p.getLinkState(self.fr5, 7)[1])
         rotated_relative_position = rotation.apply(relative_position)
         gripper_centre_pos = np.array(gripper_pos) + rotated_relative_position
+        # print("test 1116", self.get_observation()[0][0:6], gripper_centre_pos)
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         return np.linalg.norm(gripper_centre_pos - target_position)
 
     def reward(self):
-        reward = 0
-
-        # 计算距离reward
-        total_dis = self.get_dis() #+ self.get_idlepos_dis()
-        # obs = self.get_observation()
-        # total_dis = np.linalg.norm(   obs[0][0:6] - obs[0][36:42])
-        # print('dis: ', tota   l_dis)
-        if self.last_dis < 0:
-            reward = 0
-        else:
-            reward = 2000*(self.last_dis - total_dis)
-            # print("dis_reward: ", reward) 0.0? - ?.?
-        self.last_dis = total_dis
-
-        # XXX 接近障碍物
-        reward -= calc.near_obs(self.get_observation())
-
         # 获取与桌子和障碍物的接触点
         table_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.table)
         obstacle1_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.obstacle1)
@@ -137,14 +95,9 @@ class Env:
         for contact_point in table_contact_points or obstacle1_contact_points:
             link_index = contact_point[3]
             if link_index not in [0, 1]:
-                if not self.obstacle_contact:
-                    print('touch obstacle!')
-                    reward = -300
-                    # XXX contact
                 self.obstacle_contact = True
-                reward = -5
 
-        # 计算结束
+        # 计算奖励
         if self.get_dis() < 0.05 and self.step_num <= self.max_steps:
             self.success_reward = 100
             if self.obstacle_contact:
@@ -154,14 +107,9 @@ class Env:
                     self.success_reward = 50
                 else:
                     return 
-            # if self.obstacle_contact:
-            #     reward = 400
-            # else:
-            #     reward = 1000
             self.terminated = True
-            # XXX reach target
-            print("Terminated for reaching target")
 
+        # 达到最大步数
         elif self.step_num >= self.max_steps:
             distance = self.get_dis()
             if 0.05 <= distance <= 0.2:
@@ -174,19 +122,7 @@ class Env:
                 elif not self.is_senior:
                     self.success_reward *= 0.5
                     
-            reward = self.success_reward * 10
-            # if self.success_reward < 30:
-            #     reward = -300
             self.terminated = True
-            # XXX reach max steps
-            print("Terminated for reaching max steps, dis: ", self.get_dis(), 
-                  'total_reward: ', self.total_reward, 
-                  'idlepos_dis', total_dis)
-
-        self.total_reward += reward
-
-        # XXX calc reward
-        return reward
 
 
     def reset_episode(self):
@@ -195,11 +131,3 @@ class Env:
 
     def close(self):
         self.p.disconnect()
-
-    def _get_info(self):
-        return {'dis': self.get_dis(), 'score': self.success_reward}
-
-    def _get_reward(self):
-        return 
-
-    
