@@ -112,23 +112,35 @@ class Env:
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         return np.linalg.norm(gripper_centre_pos - target_position)
 
+    def get_obs_dis(self):
+        gripper_pos = self.p.getLinkState(self.fr5, 6)[0]
+        relative_position = np.array([0, 0, 0.15])
+        rotation = R.from_quat(self.p.getLinkState(self.fr5, 7)[1])
+        rotated_relative_position = rotation.apply(relative_position)
+        gripper_centre_pos = np.array(gripper_pos) + rotated_relative_position
+        target_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
+        return np.linalg.norm(gripper_centre_pos - target_position)
+
+
     def reward(self):
         reward = 0
 
         # 计算距离reward
-        total_dis = self.get_dis() #+ self.get_idlepos_dis()
+        total_dis = self.get_dis() - self.get_obs_dis()
+        #+ self.get_idlepos_dis()
         # obs = self.get_observation()
         # total_dis = np.linalg.norm(   obs[0][0:6] - obs[0][36:42])
         # print('dis: ', tota   l_dis)
         if self.last_dis < 0:
             reward = 0
         else:
-            reward = 2000*(self.last_dis - total_dis)
+            reward = 1000*(self.last_dis - total_dis)
             # print("dis_reward: ", reward) 0.0? - ?.?
         self.last_dis = total_dis
 
         # XXX 接近障碍物
         reward -= calc.near_obs(self.get_observation())
+        # print('reward',reward)
 
         # 获取与桌子和障碍物的接触点
         table_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.table)
@@ -139,10 +151,10 @@ class Env:
             if link_index not in [0, 1]:
                 if not self.obstacle_contact:
                     print('touch obstacle!')
-                    reward = -300
+                    # reward = -300
                     # XXX contact
                 self.obstacle_contact = True
-                reward = -5
+                reward = -10
 
         # 计算结束
         if self.get_dis() < 0.05 and self.step_num <= self.max_steps:
@@ -154,10 +166,10 @@ class Env:
                     self.success_reward = 50
                 else:
                     return 
-            # if self.obstacle_contact:
-            #     reward = 400
-            # else:
-            #     reward = 1000
+            if self.obstacle_contact:
+                reward = 300
+            else:
+                reward = 1000
             self.terminated = True
             # XXX reach target
             print("Terminated for reaching target")
@@ -174,9 +186,9 @@ class Env:
                 elif not self.is_senior:
                     self.success_reward *= 0.5
                     
-            reward = self.success_reward * 10
-            # if self.success_reward < 30:
-            #     reward = -300
+            reward = self.success_reward * 5
+            if self.success_reward < 30:
+                reward = -300
             self.terminated = True
             # XXX reach max steps
             print("Terminated for reaching max steps, dis: ", self.get_dis(), 

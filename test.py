@@ -1,5 +1,5 @@
 from std_env import Env
-from team_algorithm import PPOAlgorithm
+from team_algorithm import MyCustomAlgorithm
 
 def main(algorithm):
     env = Env(is_senior=False,seed=10430,gui=True)
@@ -37,7 +37,7 @@ def main(algorithm):
     env.close()
 
 if __name__ == "__main__":
-    algorithm = PPOAlgorithm()
+    algorithm = MyCustomAlgorithm()
     print(algorithm.__class__.__name__)
     # algorithm = TriangleAlgorithm()
     main(algorithm)

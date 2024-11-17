@@ -100,7 +100,7 @@ class Calc:
                 if if_print:
                     print(obs_pos, obs[i:i+3])
                     print("touch obs")
-                res = max(res, 0.3/(dis-near_r))
+                res = max(res, 0.5/(dis-near_r))
         return res
 
 

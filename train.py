@@ -34,4 +34,4 @@ if len(sys.argv) > 1:
   model = PPO.load(load_path, train_env, verbose=1, tensorboard_log='./tensorboard/')
 else:
   model = PPO("MlpPolicy", train_env, verbose=1, tensorboard_log='./tensorboard/')
-model.learn(100000, callback=eval_callback)
+model.learn(100000, callback=eval_callback, batch_size=512, n_steps=512, n_epochs=5)
