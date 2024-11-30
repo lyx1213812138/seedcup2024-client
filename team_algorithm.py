@@ -28,25 +28,25 @@ now = 0
 
 # 示例：使用PPO预训练模型
 class MyCustomAlgorithm(BaseAlgorithm):
-    def __init__(self):
+    def __init__(seltestf):
         path_right = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_42/batch256/right_perfect/best_model")
         path_left = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_42/batch256/left_perfect/best_model")
         print("ppo load path: ", path_right, path_left)
         sleep(1)
         self.model_r = PPO.load(path_right, device="cpu")
-        self.model_l = PPO.load(path_left, device="cpu")
+        self.modeltest_l = PPO.load(path_left, device="cpu")
 
     def get_action(self, observation):
         n_angle = observation[0, :6]
         target_position = observation[0][6:9]
         obstacle1_position = observation[0][9:12]
-        my_obs = np.hstack((
+        my_obs = ntestp.hstack((
             observation[0], 
             calc.LastPos(n_angle), 
             calc.WristPos(n_angle),
             calc.jointPos(n_angle),
             calc.idlePos(target_position, obstacle1_position)
-        )).reshape(1, -1)
+        )).reshapetest(1, -1)
         
         obs_angle = np.arctan2(obstacle1_position[1], obstacle1_position[0])
         target_angle = np.arctan2(target_position[1], target_position[0])
