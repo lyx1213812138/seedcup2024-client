@@ -11,7 +11,8 @@ from ccalc import Calc
 calc = Calc()
 
 class Env:
-    def __init__(self,is_senior=False,seed=565, gui=False):
+    def __init__(self,is_senior=False,seed=123, gui=False, pos='left'):
+        self.pos = pos
         self.unwrapped = self
         self.seed = seed
         self.is_senior = is_senior
@@ -47,6 +48,7 @@ class Env:
         self.terminated = False
         self.obstacle_contact = False   
         self.last_dis = -1
+        self.last_obs_dis = -1
         self.total_reward = 0
         neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
         neutral_angle = [x * math.pi / 180 for x in neutral_angle]
@@ -56,9 +58,22 @@ class Env:
         self.goaly = np.random.uniform(0.8, 0.9, 1)
         self.goalz = np.random.uniform(0.1, 0.3, 1)
         self.target_position = [self.goalx[0], self.goaly[0], self.goalz[0]]
-        self.p.resetBasePositionAndOrientation(self.target, self.target_position, [0, 0, 0, 1])
-
         self.obstacle1_position = [np.random.uniform(-0.2, 0.2, 1) + self.goalx[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
+
+        obs_angle = np.arctan2(self.obstacle1_position[1], self.obstacle1_position[0][0])
+        target_angle = np.arctan2(self.target_position[1], self.target_position[0])
+        if self.pos == 'right':
+            if obs_angle - target_angle < 0:
+                self.obstacle1_position[0] = self.target_position[0] - 0.1
+        elif self.pos == 'center':
+            if abs(obs_angle - target_angle) > 0.2:
+                self.obstacle1_position[0] = self.target_position[0]
+        elif self.pos == 'left':
+            if obs_angle - target_angle > 0:
+                self.obstacle1_position[0] = self.target_position[0]
+        # print("1118", self.obstacle1_position, self.target_position)
+
+        self.p.resetBasePositionAndOrientation(self.target, self.target_position, [0, 0, 0, 1])
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
         for _ in range(100):
             self.p.stepSimulation()
@@ -73,12 +88,12 @@ class Env:
 
         # XXX observation        
         self.observation = np.hstack((
-            obs_joint_angles, 
-            target_position, obstacle1_position, 
-            calc.LastPos(obs_joint_angles), 
-            calc.WristPos(obs_joint_angles),
-            calc.jointPos(obs_joint_angles),
-            calc.idlePos(target_position, obstacle1_position)
+            obs_joint_angles, # [0:6]
+            target_position, obstacle1_position, # [6:12]
+            calc.LastPos(obs_joint_angles),  # [12:15]
+            calc.WristPos(obs_joint_angles), # [15:18]
+            calc.jointPos(obs_joint_angles), # [18:36]
+            calc.idlePos(target_position, obstacle1_position) #[36:42]
         )).flatten().reshape(1, -1)
         # print('obs: ', self.observation, self.observation.shape)
         
@@ -125,22 +140,24 @@ class Env:
     def reward(self):
         reward = 0
 
-        # 计算距离reward
-        total_dis = self.get_dis() - self.get_obs_dis()
-        #+ self.get_idlepos_dis()
-        # obs = self.get_observation()
-        # total_dis = np.linalg.norm(   obs[0][0:6] - obs[0][36:42])
-        # print('dis: ', tota   l_dis)
+        # XXX 计算距离reward
+        total_dis = self.get_dis()
+        obs = self.get_observation()
+        total_dis = np.linalg.norm(obs[0][0:6] - obs[0][36:42]) + self.get_dis()
         if self.last_dis < 0:
             reward = 0
         else:
             reward = 1000*(self.last_dis - total_dis)
-            # print("dis_reward: ", reward) 0.0? - ?.?
         self.last_dis = total_dis
 
         # XXX 接近障碍物
-        reward -= calc.near_obs(self.get_observation())
-        # print('reward',reward)
+        dis = calc.near_obs(self.get_observation(), self.get_obs_dis())
+        if self.last_obs_dis > 0:
+            if dis < 0.2:
+                reward -= 500*(self.last_obs_dis - dis)
+            elif dis < 0.25:
+                reward -= 200*(self.last_obs_dis - dis)
+        self.last_obs_dis = dis
 
         # 获取与桌子和障碍物的接触点
         table_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.table)
@@ -150,11 +167,10 @@ class Env:
             link_index = contact_point[3]
             if link_index not in [0, 1]:
                 if not self.obstacle_contact:
-                    print('touch obstacle!')
-                    # reward = -300
                     # XXX contact
-                self.obstacle_contact = True
-                reward = -10
+                    reward = -300
+                    self.obstacle_contact = True
+                # reward = -10
 
         # 计算结束
         if self.get_dis() < 0.05 and self.step_num <= self.max_steps:
@@ -166,13 +182,16 @@ class Env:
                     self.success_reward = 50
                 else:
                     return 
+                
+            # XXX reach target
             if self.obstacle_contact:
                 reward = 300
             else:
                 reward = 1000
             self.terminated = True
-            # XXX reach target
-            print("Terminated for reaching target")
+            print("Terminated for reaching target", 
+                  'touch :' , self.obstacle_contact,
+                  '\n\ttotal_reward: ', self.total_reward)
 
         elif self.step_num >= self.max_steps:
             distance = self.get_dis()
@@ -186,15 +205,22 @@ class Env:
                 elif not self.is_senior:
                     self.success_reward *= 0.5
                     
-            reward = self.success_reward * 5
-            if self.success_reward < 30:
-                reward = -300
             self.terminated = True
             # XXX reach max steps
+            reward = self.success_reward
+            # if self.success_reward < 30:
+            #     reward = -300
             print("Terminated for reaching max steps, dis: ", self.get_dis(), 
-                  'total_reward: ', self.total_reward, 
-                  'idlepos_dis', total_dis)
+                  'obs_dis: ', self.get_obs_dis(),
+                  'touch :' , self.obstacle_contact,
+                #   'pos dis: ', total_dis,
+                  '\n\ttotal_reward: ', self.total_reward)
 
+        if self.terminated:
+            reward = self.success_reward - 50
+            print('success_reward', self.success_reward)
+        else:
+            reward = 0
         self.total_reward += reward
 
         # XXX calc reward

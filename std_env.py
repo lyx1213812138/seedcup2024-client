@@ -7,7 +7,8 @@ from pybullet_utils import bullet_client
 from scipy.spatial.transform import Rotation as R
 
 class Env:
-    def __init__(self,is_senior,seed, gui=False):
+    def __init__(self,is_senior,seed, gui=False, pos='left'):
+        self.pos = pos
         self.seed = seed
         self.is_senior = is_senior
         self.step_num = 0
@@ -42,9 +43,23 @@ class Env:
         self.goaly = np.random.uniform(0.8, 0.9, 1)
         self.goalz = np.random.uniform(0.1, 0.3, 1)
         self.target_position = [self.goalx[0], self.goaly[0], self.goalz[0]]
-        self.p.resetBasePositionAndOrientation(self.target, self.target_position, [0, 0, 0, 1])
-
         self.obstacle1_position = [np.random.uniform(-0.2, 0.2, 1) + self.goalx[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
+
+        obs_angle = np.arctan2(self.obstacle1_position[1], self.obstacle1_position[0][0])
+        target_angle = np.arctan2(self.target_position[1], self.target_position[0])
+
+        if self.pos == 'right':
+            if obs_angle - target_angle < 0:
+                self.obstacle1_position[0] = self.target_position[0] - 0.1
+        elif self.pos == 'center':
+            if abs(obs_angle - target_angle) > 0.2:
+                self.obstacle1_position[0] = self.target_position[0]
+        elif self.pos == 'left':
+            if obs_angle - target_angle > 0:
+                self.obstacle1_position[0] = self.target_position[0]
+        # print("1118", self.obstacle1_position, self.target_position)
+
+        self.p.resetBasePositionAndOrientation(self.target, self.target_position, [0, 0, 0, 1])
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
         for _ in range(100):
             self.p.stepSimulation()
@@ -54,8 +69,8 @@ class Env:
     def get_observation(self):
         joint_angles = [self.p.getJointState(self.fr5, i)[0] * 180 / np.pi for i in range(1, 7)]
         obs_joint_angles = ((np.array(joint_angles, dtype=np.float32) / 180) + 1) / 2
-        target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         obstacle1_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
+        target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         self.observation = np.hstack((obs_joint_angles, target_position, obstacle1_position)).flatten().reshape(1, -1)
         return self.observation
 
@@ -75,6 +90,7 @@ class Env:
         for _ in range(20):
             self.p.stepSimulation()
 
+        # print("get_dis", self.get_dis(), self.get_obs_dis())
         return self.observation
 
     def get_dis(self):
@@ -87,6 +103,15 @@ class Env:
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         return np.linalg.norm(gripper_centre_pos - target_position)
 
+    def get_obs_dis(self):
+        gripper_pos = self.p.getLinkState(self.fr5, 6)[0]
+        relative_position = np.array([0, 0, 0.15])
+        rotation = R.from_quat(self.p.getLinkState(self.fr5, 7)[1])
+        rotated_relative_position = rotation.apply(relative_position)
+        gripper_centre_pos = np.array(gripper_pos) + rotated_relative_position
+        target_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
+        return np.linalg.norm(gripper_centre_pos - target_position)
+
     def reward(self):
         # 获取与桌子和障碍物的接触点
         table_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.table)
@@ -96,6 +121,7 @@ class Env:
             link_index = contact_point[3]
             if link_index not in [0, 1]:
                 self.obstacle_contact = True
+                # print("obstacle_contact")
 
         # 计算奖励
         if self.get_dis() < 0.05 and self.step_num <= self.max_steps:

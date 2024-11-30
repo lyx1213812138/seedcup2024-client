@@ -4,12 +4,15 @@ import numpy as np
 from time import sleep, time
 from pynput import keyboard
 import threading
+from ccalc import Calc
+
+calc = Calc()
 
 pause = False 
 
 def main(algorithm):
     global pause, env
-    env = Env(is_senior=False,seed=10430,gui=True)
+    env = Env(is_senior=False,seed=10430,gui=True, pos='left')
     done = False
     printed = True
     while True:
@@ -19,6 +22,7 @@ def main(algorithm):
             continue
         if not done:
             observation = env.get_observation()
+                
             action = algorithm.get_action(observation)
             obs = env.step(action)
             sleep(0.05)

@@ -29,10 +29,12 @@ now = 0
 # 示例：使用PPO预训练模型
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
-        path = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_42/best_model")
-        print("ppo load path: ", path)
+        path_right = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_42/batch256/right_perfect/best_model")
+        path_left = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_42/batch256/left_perfect/best_model")
+        print("ppo load path: ", path_right, path_left)
         sleep(1)
-        self.model = PPO.load(path, device="cpu")
+        self.model_r = PPO.load(path_right, device="cpu")
+        self.model_l = PPO.load(path_left, device="cpu")
 
     def get_action(self, observation):
         n_angle = observation[0, :6]
@@ -45,13 +47,13 @@ class MyCustomAlgorithm(BaseAlgorithm):
             calc.jointPos(n_angle),
             calc.idlePos(target_position, obstacle1_position)
         )).reshape(1, -1)
-        # print('my_obs: ', my_obs)
-        # action, _ = self.model.predict(observation)
-        action, _ = self.model.predict(my_obs)
-
-        calc.near_obs(my_obs, if_print=True)   
-
-        # print('action: ', action)
+        
+        obs_angle = np.arctan2(obstacle1_position[1], obstacle1_position[0])
+        target_angle = np.arctan2(target_position[1], target_position[0])
+        if obs_angle - target_angle > 0.05:
+            action, _ = self.model_r.predict(my_obs)
+        else:
+            action, _ = self.model_l.predict(my_obs)
         return np.reshape(action, (6, ))
     
 
@@ -81,83 +83,12 @@ class TriangleAlgorithm(BaseAlgorithm):
         a = observation[0, :6] 
         t = observation[0, 6:9]
         o = observation[0, 9:]
-        action = [0, 0, 0, 0, 0, 0]
-        # print(a)
-
-        # # action[0]
-        # r = 0.9
-        # l1 = 0.865 * r
-        # l2 = 0.225 * r
-        # l3 = 0.121  * r
-        # l = np.sqrt(l1 ** 2 + l3 ** 2)
-        # d = np.sqrt(t[0] ** 2 + t[1] ** 2)
-        # if l + l2 < d: d = l + l2 - 0.0000001
-        # a1 = math.acos((d**2 + l**2 - l2**2) / (2 * d * l))
-        # a2 = np.arctan2(t[1], t[0])
-        # oa = np.arctan2(o[1], o[0])
-        # a3 = np.arctan2(l3, l1)
-        # if oa > a2 + 0.01:
-        #     a_t = a2 - a1 + a3
-        # else:
-        #     a_t = a1 + a2 + a3
-        # a_t_n = (a_t / math.pi) / 2%1
-        # # print(a1, a2, a3)
-
-        # # action[4]
-        # a4 = math.acos((l**2 + l2**2 - d**2) / (2 * l * l2))
-        # if oa > a2 + 0.01:
-        #     a_t_2 = math.pi/2+a4+a3
-        # else:
-        #     a_t_2 = math.pi/2-a4+a3
-        # a_t_n2 = (a_t_2/math.pi + 1)/2%1
-        # # print(a4, a_t_n2)
-
-        # action = np.array(self.to_target2(a, np.array([a_t_n, 0.07, 0.40097904, 0.04461199, a_t_n2, 0.5])))
-        # # [0.36261892 0.3400045  0.11557633 0.04461199 0.36262435 0.49998325]
-        # ### [0.33914432 0.11602792 0.3494153  0.06071219 0.47847939 0.51293832]
-        # print('action: ', action / (np.max(np.abs(action))))
-
-        # action[0]
-        r = 0.9
-        l1 = 0.865 * r
-        l2 = 0.225 * r
-        l3 = 0.121  * r
-        l4 = 0.168 * r
-        a_t_n3 = -60*(t[2]**4)+51.3333*(t[2]**3)-15.65*(t[2]**2)+2.161*t[2]-0.045
-        l = np.sqrt(l1 ** 2 + l3 ** 2)
-        s = np.sqrt(l ** 2 + l4 ** 2)
-        l = s * np.cos(a_t_n3 * math.pi / 2)
-        d = np.sqrt(t[0] ** 2 + t[1] ** 2)
-        if l + l2 < d: d = l + l2 - 0.0000001
-        a1 = math.acos((d**2 + l**2 - l2**2) / (2 * d * l))
-        a2 = np.arctan2(t[1], t[0])
-        oa = np.arctan2(o[1], o[0])
-        a3 = np.arctan2(l3, l1)
-        if o[0] > t[0] - 0.1:
-            if oa > a2 + 0.01:
-                a_t = a2 - a1 + a3
-            else:
-                a_t = a1 + a2 + a3
-            a_t_n = (a_t / math.pi) / 2%1
-            #print(a1, a2, a3)
-
-            # action[4]
-            a4 = math.acos((l**2 + l2**2 - d**2) / (2 * l * l2))
-            if oa > a2 + 0.01:
-                a_t_2 = math.pi/2+a4+a3
-            else:
-                a_t_2 = math.pi/2-a4+a3
-            a_t_n2 = (a_t_2/math.pi + 1)/2%1
-            #print(a4, a_t_n2)
-            #action[5] && z
-            if abs(a[4]-a_t_n2) > 0.04:
-                a_t_n3 -= 0.01
-                action = np.array(self.to_target2(a, np.array([a_t_n, a_t_n3, 0.40097904, 0.04461199 - a_t_n3 + 0.07, a_t_n2, 0.5])))
-
-        # print('action: ', action)
+        action = self.to_target2(a, calc.idlePos(t, o))
+    
         if np.max(np.abs(action)) == 0:
             action = np.random.rand(6) - 0.5
-        print(action / (np.max(np.abs(action))))
+        # print(action / (np.max(np.abs(action))))
+        # action = np.array(self.to_target2(a, calc.idlePos(t, o)))
         return action / (np.max(np.abs(action)))
         
 

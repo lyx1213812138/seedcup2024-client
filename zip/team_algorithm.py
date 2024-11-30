@@ -3,6 +3,7 @@ from stable_baselines3 import PPO
 from abc import ABC, abstractmethod
 import math
 from time import sleep
+import os
 
 #DH参数
 a=[0 , -0.425 , -0.395 ,0 , 0 , 0]
@@ -88,26 +89,27 @@ class Calc:
             return True
         return False
 
-    def near_obs(self,my_obs, if_print=False) -> float:
-        near_r = 0.1 # param 球边离关节中心的距离
+    def near_obs(self,my_obs, hand_obs_dis, if_print=False) -> float:
+        near_r = 0.15 # param 球边离关节中心的距离
         obs = my_obs[0] 
         obs_pos = obs[9:12]
-        last_pos = obs[12:15]
-        wrist_pos = obs[15:18]
-        hand_pos = last_pos * 2 - wrist_pos
-        obs = np.hstack((obs, hand_pos))
         res = 0
-        for i in range(12, len(obs), 3):
-            dis = np.linalg.norm(obs_pos - obs[i:i+3])
+        for i in range(12, len(obs)+3, 3):
+            if i >= len(obs):
+                dis = hand_obs_dis
+            else:
+                dis = np.linalg.norm(obs_pos - obs[i:i+3])
             if dis < 0.1 + near_r:
                 if if_print:
                     print(obs_pos, obs[i:i+3])
                     print("touch obs")
-                res = max(res, 0.3/(dis-near_r))
+                res = max(res, 0.5/(dis-near_r))
         return res
 
 
     def idlePos(self,t, o):
+        target = np.array([0.5, 0.07, 0.40097904, 0.04461199, 0.5, 0.5])
+        try:
             r = 0.9
             l1 = 0.865 * r
             l2 = 0.225 * r
@@ -140,10 +142,10 @@ class Calc:
                 else:
                     a_t_2 = math.pi/2-a4+a3
                 a_t_n2 = (a_t_2/math.pi + 1)/2%1
-
-            target = np.array([a_t_n, 0.07, 0.40097904, 0.04461199, a_t_n2, 0.5])
-            # print(target)
-            return target
+            target = np.array([a_t_n, 0.07, 0.40097904, 0.04461199, a_t_n2, 0.5])       
+        except:
+            print("error")
+        return target
     
 calc = Calc()
 
@@ -162,30 +164,31 @@ class BaseAlgorithm(ABC):
         """
         pass
 
-
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
-        path = "ppo_eval_logs_retrain/best_model"
-        print("ppo load path: ", path)
+        path_right = os.path.join(os.path.dirname(__file__), "right_model")
+        path_left = os.path.join(os.path.dirname(__file__), "left_model")
+        print("ppo load path: ", path_right, path_left)
         sleep(1)
-        self.model = PPO.load(path, device="cpu")
+        self.model_r = PPO.load(path_right, device="cpu")
+        self.model_l = PPO.load(path_left, device="cpu")
 
     def get_action(self, observation):
-        angle = observation[0, :6]
+        n_angle = observation[0, :6]
+        target_position = observation[0][6:9]
+        obstacle1_position = observation[0][9:12]
         my_obs = np.hstack((
             observation[0], 
-            calc.LastPos(angle), 
-            calc.WristPos(angle),
-            # calc.jointPos(angle)
+            calc.LastPos(n_angle), 
+            calc.WristPos(n_angle),
+            calc.jointPos(n_angle),
+            calc.idlePos(target_position, obstacle1_position)
         )).reshape(1, -1)
-        # print('my_obs: ', my_obs)
-        # action, _ = self.model.predict(observation)
-        action, _ = self.model.predict(my_obs)
-
-        # calc.near_obs(observation, if_print=True)   
-
-        # print('action: ', action)
+        
+        obs_angle = np.arctan2(obstacle1_position[1], obstacle1_position[0])
+        target_angle = np.arctan2(target_position[1], target_position[0])
+        if obs_angle - target_angle > 0.05:
+            action, _ = self.model_r.predict(my_obs)
+        else:
+            action, _ = self.model_l.predict(my_obs)
         return np.reshape(action, (6, ))
-    
-
-

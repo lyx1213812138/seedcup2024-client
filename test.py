@@ -1,8 +1,8 @@
 from std_env import Env
-from team_algorithm import MyCustomAlgorithm
+from zip.team_algorithm import MyCustomAlgorithm
 
 def main(algorithm):
-    env = Env(is_senior=False,seed=10430,gui=True)
+    env = Env(is_senior=False,seed=130,gui=True, pos='all')
     done = False
     num_episodes = 100
     final_score = 0
