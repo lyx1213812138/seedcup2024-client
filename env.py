@@ -11,10 +11,11 @@ class Env:
         self.seed = seed
         self.is_senior = is_senior
         self.step_num = 0
-        self.max_steps = 100
+        self.max_steps = 200
         self.p = bullet_client.BulletClient(connection_mode=p.GUI if gui else p.DIRECT)
         self.p.setGravity(0, 0, -9.81)
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
         self.init_env()
 
     def init_env(self):
@@ -46,6 +47,11 @@ class Env:
 
         self.obstacle1_position = [np.random.uniform(-0.2, 0.2, 1) + self.goalx[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
+
+        # 设置目标朝x z平面赋予随机速度
+        self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+        self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, self.random_velocity[1]])
+        
         for _ in range(100):
             self.p.stepSimulation()
 
@@ -74,6 +80,13 @@ class Env:
 
         for _ in range(20):
             self.p.stepSimulation()
+
+        # 检查目标位置并反向速度
+        target_position = self.p.getBasePositionAndOrientation(self.target)[0]
+        if target_position[0] > 0.5 or target_position[0] < -0.5:
+            self.p.resetBaseVelocity(self.target, linearVelocity=[-self.random_velocity[0], 0, self.random_velocity[1]])
+        if target_position[2] > 0.5 or target_position[2] < 0.1:
+            self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, -self.random_velocity[1]])
 
         return self.observation
 
