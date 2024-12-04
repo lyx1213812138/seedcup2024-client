@@ -12,11 +12,12 @@ from .utils import predict_pos, relative_dir
 
 calc = Calc()
 
-class Env:
+class Env(gym.Env):
     def __init__(self,is_senior=False,seed=123, gui=False, pos='all'):
+        super().__init__()
         self.reward = reward
         self.pos = pos
-        self.unwrapped = self
+        # self.unwrapped = self
         self.seed = seed
         self.is_senior = is_senior
         self.step_num = 0
