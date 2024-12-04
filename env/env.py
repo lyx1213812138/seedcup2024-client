@@ -7,25 +7,31 @@ from pybullet_utils import bullet_client
 from scipy.spatial.transform import Rotation as R
 import gymnasium as gym
 from ccalc import Calc
+from .reward import reward
+from .utils import predict_pos, relative_dir
 
 calc = Calc()
 
 class Env:
     def __init__(self,is_senior=False,seed=123, gui=False, pos='left'):
+        self.reward = reward
         self.pos = pos
         self.unwrapped = self
         self.seed = seed
         self.is_senior = is_senior
         self.step_num = 0
-        self.max_steps = 100
+        self.max_steps = 200
         self.p = bullet_client.BulletClient(connection_mode=p.GUI if gui else p.DIRECT)
         self.p.setGravity(0, 0, -9.81)
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
 
         self.action_space = gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float64)
         # XXX observation space
-        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(1, 42), dtype=np.float64)
+        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(1, 47), dtype=np.float64)
         self.metadata = {'render.modes': []}
+
+        self.target_step = 120 # 未来目标位置的步数
 
         self.init_env()
 
@@ -60,21 +66,28 @@ class Env:
         self.target_position = [self.goalx[0], self.goaly[0], self.goalz[0]]
         self.obstacle1_position = [np.random.uniform(-0.2, 0.2, 1) + self.goalx[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
 
-        obs_angle = np.arctan2(self.obstacle1_position[1], self.obstacle1_position[0][0])
-        target_angle = np.arctan2(self.target_position[1], self.target_position[0])
+        dir = relative_dir(
+            {'x': self.obstacle1_position[0][0], 'y': self.obstacle1_position[1]}, 
+            {'x': self.target_position[0], 'y': self.target_position[1]}
+        )
         if self.pos == 'right':
-            if obs_angle - target_angle < 0:
+            if dir == 'left':
                 self.obstacle1_position[0] = self.target_position[0] - 0.1
         elif self.pos == 'center':
-            if abs(obs_angle - target_angle) > 0.2:
+            if dir != 'center':
                 self.obstacle1_position[0] = self.target_position[0]
         elif self.pos == 'left':
-            if obs_angle - target_angle > 0:
+            if dir == 'right':
                 self.obstacle1_position[0] = self.target_position[0]
         # print("1118", self.obstacle1_position, self.target_position)
 
         self.p.resetBasePositionAndOrientation(self.target, self.target_position, [0, 0, 0, 1])
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
+
+        # 设置目标朝x z平面赋予随机速度
+        self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+        self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, self.random_velocity[1]])
+
         for _ in range(100):
             self.p.stepSimulation()
 
@@ -85,15 +98,29 @@ class Env:
         obs_joint_angles = ((np.array(joint_angles, dtype=np.float32) / 180) + 1) / 2
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         obstacle1_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
-
+    
+        future_tar_pos = predict_pos(target_position, self.random_velocity, max(0, self.target_step-self.step_num))
+        end_tar_pos = predict_pos(target_position, self.random_velocity, max(0, self.max_steps-self.step_num))
+        dir_future = relative_dir(
+            {'x': future_tar_pos[0], 'y': future_tar_pos[1]},
+            {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
+            True
+        )
+        dir_end = relative_dir(
+            {'x': end_tar_pos[0], 'y': end_tar_pos[1]},
+            {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
+            True
+        )
         # XXX observation        
         self.observation = np.hstack((
-            obs_joint_angles, # [0:6]
-            target_position, obstacle1_position, # [6:12]
-            calc.LastPos(obs_joint_angles),  # [12:15]
+            obs_joint_angles, # [0:6] # 机械臂角度
+            future_tar_pos, obstacle1_position, # [6:12] # 环境物体位置
+            calc.LastPos(obs_joint_angles),  # [12:15] # 各关节位置
             calc.WristPos(obs_joint_angles), # [15:18]
             calc.jointPos(obs_joint_angles), # [18:36]
-            calc.idlePos(target_position, obstacle1_position) #[36:42]
+            calc.idlePos(future_tar_pos, obstacle1_position), #[36:42] # 预测机械臂角度
+            [self.random_velocity[0], 0, self.random_velocity[1]], # [42:45] # 目标物体速度
+            [dir_future, dir_end] # [45:47] # 未来目标位置和最终目标位置的方向
         )).flatten().reshape(1, -1)
         # print('obs: ', self.observation, self.observation.shape)
         
@@ -109,23 +136,44 @@ class Env:
         fr5_joint_angles = np.array(joint_angles) + (np.array(action[:6]) / 180 * np.pi)
         gripper = np.array([0, 0])
         angle_now = np.hstack([fr5_joint_angles, gripper])
-        reward = self.reward()
+        reward = self.reward(self)
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=angle_now)
 
         for _ in range(20):
             self.p.stepSimulation()
 
+        # 检查目标位置并反向速度
+        target_position = self.p.getBasePositionAndOrientation(self.target)[0]
+        if target_position[0] > 0.5 or target_position[0] < -0.5:
+            self.p.resetBaseVelocity(self.target, linearVelocity=[-self.random_velocity[0], 0, self.random_velocity[1]])
+        if target_position[2] > 0.5 or target_position[2] < 0.1:
+            self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, -self.random_velocity[1]])
+
+        # TEST 查看100步时的target_position
+        if self.step_num == self.target_step:
+            tp = np.array(target_position)
+            v = [self.random_velocity[0], 0, self.random_velocity[1]]
+            if np.linalg.norm(predict_pos(self.target_position, self.random_velocity, self.target_step) - tp) > 0.03:
+                print('target position error: ', self.predict_pos, tp)
+                print('start :', self.target_position, 'velocity: ', v)
+                exit(1)
+
         return (self.get_observation(), reward, self.terminated, self.terminated, self._get_info())
         # return self.observation
 
-    def get_dis(self):
+
+    # step!=0: 抓手位置和step步(一共走了)的目标位置的距离, 如果 now step > step 则按照当前目标位置
+    def get_dis(self, step=-1): 
+        if step == -1:
+            step = self.step_num
         gripper_pos = self.p.getLinkState(self.fr5, 6)[0]
         relative_position = np.array([0, 0, 0.15])
         rotation = R.from_quat(self.p.getLinkState(self.fr5, 7)[1])
         rotated_relative_position = rotation.apply(relative_position)
         gripper_centre_pos = np.array(gripper_pos) + rotated_relative_position
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
-        return np.linalg.norm(gripper_centre_pos - target_position)
+        return np.linalg.norm(gripper_centre_pos 
+            - predict_pos(target_position, self.random_velocity, max(0, step-self.step_num)))
 
     def get_obs_dis(self):
         gripper_pos = self.p.getLinkState(self.fr5, 6)[0]
@@ -135,96 +183,6 @@ class Env:
         gripper_centre_pos = np.array(gripper_pos) + rotated_relative_position
         target_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
         return np.linalg.norm(gripper_centre_pos - target_position)
-
-
-    def reward(self):
-        reward = 0
-
-        # XXX 计算距离reward
-        total_dis = self.get_dis()
-        obs = self.get_observation()
-        total_dis = np.linalg.norm(obs[0][0:6] - obs[0][36:42]) + self.get_dis()
-        if self.last_dis < 0:
-            reward = 0
-        else:
-            reward = 1000*(self.last_dis - total_dis)
-        self.last_dis = total_dis
-
-        # XXX 接近障碍物
-        dis = calc.near_obs(self.get_observation(), self.get_obs_dis())
-        if self.last_obs_dis > 0:
-            if dis < 0.2:
-                reward -= 500*(self.last_obs_dis - dis)
-            elif dis < 0.25:
-                reward -= 200*(self.last_obs_dis - dis)
-        self.last_obs_dis = dis
-
-        # 获取与桌子和障碍物的接触点
-        table_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.table)
-        obstacle1_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.obstacle1)
-
-        for contact_point in table_contact_points or obstacle1_contact_points:
-            link_index = contact_point[3]
-            if link_index not in [0, 1]:
-                if not self.obstacle_contact:
-                    # XXX contact
-                    reward = -300
-                    self.obstacle_contact = True
-                # reward = -10
-
-        # 计算结束
-        if self.get_dis() < 0.05 and self.step_num <= self.max_steps:
-            self.success_reward = 100
-            if self.obstacle_contact:
-                if self.is_senior:
-                    self.success_reward = 20
-                elif not self.is_senior:
-                    self.success_reward = 50
-                else:
-                    return 
-                
-            # XXX reach target
-            if self.obstacle_contact:
-                reward = 300
-            else:
-                reward = 1000
-            self.terminated = True
-            print("Terminated for reaching target", 
-                  'touch :' , self.obstacle_contact,
-                  '\n\ttotal_reward: ', self.total_reward)
-
-        elif self.step_num >= self.max_steps:
-            distance = self.get_dis()
-            if 0.05 <= distance <= 0.2:
-                self.success_reward = 100 * (1 - ((distance - 0.05) / 0.15))
-            else:
-                self.success_reward = 0
-            if self.obstacle_contact:
-                if self.is_senior:
-                    self.success_reward *= 0.2 
-                elif not self.is_senior:
-                    self.success_reward *= 0.5
-                    
-            self.terminated = True
-            # XXX reach max steps
-            reward = self.success_reward
-            # if self.success_reward < 30:
-            #     reward = -300
-            print("Terminated for reaching max steps, dis: ", self.get_dis(), 
-                  'obs_dis: ', self.get_obs_dis(),
-                  'touch :' , self.obstacle_contact,
-                #   'pos dis: ', total_dis,
-                  '\n\ttotal_reward: ', self.total_reward)
-
-        if self.terminated:
-            reward = self.success_reward - 50
-            print('success_reward', self.success_reward)
-        else:
-            reward = 0
-        self.total_reward += reward
-
-        # XXX calc reward
-        return reward
 
 
     def reset_episode(self):

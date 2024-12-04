@@ -1,5 +1,5 @@
 from std_env import Env
-from team_algorithm import MyCustomAlgorithm, TriangleAlgorithm
+from team_algorithm import MyCustomAlgorithm 
 import numpy as np
 from time import sleep, time
 from pynput import keyboard
@@ -39,7 +39,7 @@ def main(algorithm):
 def on_press(key):
     global pause
     try:
-        print(f'Key pressed: {key.char}')
+        # print(f'Key pressed: {key.char}')
         if key.char == 's':
             pause = True
         elif key.char == 'd':

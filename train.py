@@ -12,11 +12,11 @@ import env
 import my_train_test as my_test
 
 env_id = "myenv-v0"
-n_training_envs = 3
+n_training_envs = 1
 n_eval_envs = 10
 
 # Create log dir where evaluation results will be saved
-eval_log_dir = "./ppo_eval_logs_42/batch256/test"
+eval_log_dir = "./ppo_eval_logs_47/test"
 os.makedirs(eval_log_dir, exist_ok=True)
 
 # Initialize a vectorized training environment with default parameters

@@ -1,5 +1,5 @@
 from std_env import Env
-from zip.team_algorithm import MyCustomAlgorithm
+from team_algorithm import MyCustomAlgorithm
 
 def main(algorithm):
     env = Env(is_senior=False,seed=130,gui=True, pos='all')
