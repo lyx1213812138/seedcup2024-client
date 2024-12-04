@@ -12,7 +12,7 @@ import env
 import my_train_test as my_test
 
 env_id = "myenv-v0"
-n_training_envs = 1
+n_training_envs = 5
 n_eval_envs = 10
 
 # Create log dir where evaluation results will be saved
@@ -41,7 +41,7 @@ class my_log(BaseCallback):
 eval_callback = EvalCallback(eval_env, best_model_save_path=eval_log_dir,
                               log_path=eval_log_dir,
                               n_eval_episodes=5, deterministic=True,
-                              render=False, eval_freq=1500)
+                              render=False, eval_freq=2000)
                               # callback_on_new_best=my_log())
 
 if len(sys.argv) > 1:
@@ -50,4 +50,4 @@ if len(sys.argv) > 1:
 else:
   model = PPO("MlpPolicy", train_env, verbose=1, tensorboard_log='./tensorboard/', 
               batch_size=256, n_steps=2048, n_epochs=10)
-model.learn(500000, callback=eval_callback)
+model.learn(50000000, callback=eval_callback)

@@ -10,8 +10,9 @@ def reward(self) -> float:
     # XXX 计算距离reward
     obs = self.get_observation()
     total_dis = np.linalg.norm(obs[0][0:6] - obs[0][36:42]) + self.get_dis(self.target_step)
+    # print('total_dis: ', total_dis)
     if self.last_dis >= 0:
-        reward += 1000*(self.last_dis - total_dis)
+        reward += 500*(self.last_dis - total_dis)
     self.last_dis = total_dis
 
     # XXX 接近障碍物
@@ -72,12 +73,13 @@ def reward(self) -> float:
             print("# Terminated for reaching target")
         elif end_max_steps: # XXX reach max steps
             reward = self.success_reward
-            # if self.success_reward < 30:
-            #     reward = -300
+            if self.success_reward < 30:
+                reward = -self.total_reward-100
             print("# Terminated for reaching max steps")
         print("dis: ", self.get_dis(),
             'obs_dis: ', self.get_obs_dis(),
             'touch :' , self.obstacle_contact,
+            'dir:', obs[0][45:47],
             '\n\ttotal_reward: ', self.total_reward,
             '\n\tsuccess_reward: ', self.success_reward)
 

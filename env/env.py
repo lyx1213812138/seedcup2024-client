@@ -13,7 +13,7 @@ from .utils import predict_pos, relative_dir
 calc = Calc()
 
 class Env:
-    def __init__(self,is_senior=False,seed=123, gui=False, pos='left'):
+    def __init__(self,is_senior=False,seed=123, gui=False, pos='all'):
         self.reward = reward
         self.pos = pos
         self.unwrapped = self
@@ -56,15 +56,18 @@ class Env:
         self.last_dis = -1
         self.last_obs_dis = -1
         self.total_reward = 0
-        neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
-        neutral_angle = [x * math.pi / 180 for x in neutral_angle]
-        self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=neutral_angle)
 
         self.goalx = np.random.uniform(-0.2, 0.2, 1)
         self.goaly = np.random.uniform(0.8, 0.9, 1)
         self.goalz = np.random.uniform(0.1, 0.3, 1)
         self.target_position = [self.goalx[0], self.goaly[0], self.goalz[0]]
         self.obstacle1_position = [np.random.uniform(-0.2, 0.2, 1) + self.goalx[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
+
+        neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
+        neutral_angle = [x * math.pi / 180 for x in neutral_angle]
+        # TEST
+        neutral_angle = calc.idlePos(self.target_position, self.obstacle1_position)
+        self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=neutral_angle)
 
         dir = relative_dir(
             {'x': self.obstacle1_position[0][0], 'y': self.obstacle1_position[1]}, 

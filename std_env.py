@@ -7,7 +7,7 @@ from pybullet_utils import bullet_client
 from scipy.spatial.transform import Rotation as R
 
 class Env:
-    def __init__(self,is_senior,seed, gui=False, pos='left'):
+    def __init__(self,is_senior,seed, gui=False, pos='all'):
         self.pos = pos
         self.seed = seed
         self.is_senior = is_senior
