@@ -66,7 +66,7 @@ class Env:
         neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
         neutral_angle = [x * math.pi / 180 for x in neutral_angle]
         # TEST
-        neutral_angle = calc.idlePos(self.target_position, self.obstacle1_position)
+        # neutral_angle = calc.idlePos(self.target_position, self.obstacle1_position)
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=neutral_angle)
 
         dir = relative_dir(
