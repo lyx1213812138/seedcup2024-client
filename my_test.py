@@ -25,7 +25,7 @@ def main(algorithm):
                 
             action = algorithm.get_action(observation)
             obs = env.step(action)
-            sleep(0.05)
+            sleep(0.02)
 
         # Check if the episode has ended
         done = env.terminated
