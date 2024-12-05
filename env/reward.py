@@ -76,15 +76,17 @@ def reward(self) -> float:
             # if self.success_reward < 30:
             #     reward = -self.total_reward-100
             print("# Terminated for reaching max steps")
-        reward = self.success_reward * 10
+        reward = self.success_reward * 7
         self.total_reward += reward
         print("dis: ", self.get_dis(),
             'obs_dis: ', self.get_obs_dis(),
-            'touch :' , self.obstacle_contact,
-            'dir:', obs[0][45:47],
+            'touch: ' , self.obstacle_contact,
+            'dir: ', obs[0][45:47],
             '\n\ttotal_reward: ', self.total_reward,
             '\n\tsuccess_reward: ', self.success_reward)
 
     # XXX calc reward
+    if self.step_num <= self.target_step + 1:
+        reward = 0
     self.total_reward += reward
     return reward

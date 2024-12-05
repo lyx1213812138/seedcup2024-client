@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 import math
 from time import sleep
 import os
+from .utils import relative_dir, predict_pos, next_tar_step
 
 #DH参数
 a=[0 , -0.425 , -0.395 ,0 , 0 , 0]
@@ -166,29 +167,129 @@ class BaseAlgorithm(ABC):
 
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
-        path_right = os.path.join(os.path.dirname(__file__), "right_model")
-        path_left = os.path.join(os.path.dirname(__file__), "left_model")
-        print("ppo load path: ", path_right, path_left)
+        path_right = os.path.join(os.path.dirname(__file__), "left_model")
+        path_left = os.path.join(os.path.dirname(__file__), "right_model")
+        # path_tot = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_47/test/best_model.zip")
+        path_end = os.path.join(os.path.dirname(__file__), "end_model")
+        # print("ppo load path: ", path_tot, path_end)
         sleep(1)
         self.model_r = PPO.load(path_right, device="cpu")
         self.model_l = PPO.load(path_left, device="cpu")
+        # self.model = PPO.load(path_tot, device="cpu")
+        self.model_end = PPO.load(path_end, device="cpu")
+        
+        self.flag = 0
+        self.vx = 0 
+        self.vz =0
+        self.target = [0, 0, 0]
+        self.num = 0
+        self.n_obs = [0, 0, 0]
 
+        self.max_steps = 200
+        self.target_step = 94 # 未来目标位置的步数
+
+
+    def get_n_dis(self,n_angle):
+        n_pos = calc.LastPos(n_angle)
+        rela_pos = np.array([0.15, 0, 0])
+        n_pos = np.array(n_pos) + rela_pos
+        # print('#',n_pos)
+        for _ in range(3):
+            if abs(n_pos[_] - self.target[_]) >= 0.05:
+                return False
+        return True
+    
+    # v : [vx, vz]
+    def get_future_pos(self, now_tar_pos, v, step):
+        step = max(0, step - self.num)
+        # print('step:', step, self.num)
+        now_tar_pos = now_tar_pos.copy()
+        v = v.copy()
+        for _ in range(step):
+            now_tar_pos[0] += v[0]
+            now_tar_pos[1] += v[1]
+            if now_tar_pos[0] > 0.5 or now_tar_pos[0] < -0.5:
+                v[0] = -v[0]
+            if now_tar_pos[2] > 0.5 or now_tar_pos[2] < 0.1:
+                v[1] = -v[1]
+        print(now_tar_pos)
+        return now_tar_pos
+            
     def get_action(self, observation):
         n_angle = observation[0, :6]
         target_position = observation[0][6:9]
         obstacle1_position = observation[0][9:12]
-        my_obs = np.hstack((
-            observation[0], 
-            calc.LastPos(n_angle), 
-            calc.WristPos(n_angle),
-            calc.jointPos(n_angle),
-            calc.idlePos(target_position, obstacle1_position)
-        )).reshape(1, -1)
+        # print(self.num,target_position)
+        self.num += 1
+        if self.flag == 0:
+            self.n_obs = obstacle1_position
+            self.stx=target_position[0]
+            self.stz=target_position[2]
+            self.target = target_position
+            self.flag = 1
+            return np.array([0, 0, 0, 0, 0, 0])
+        if self.n_obs[0] != obstacle1_position[0]:
+            self.n_obs = obstacle1_position
+            self.stx=target_position[0]
+            self.stz=target_position[2]
+            self.target = target_position
+            self.flag = 0
+            self.num = 0
+            return np.array([0, 0, 0, 0, 0, 0])
+        if self.flag == 1:
+            self.vx = target_position[0]-self.stx
+            self.vz = target_position[2]-self.stz
+            self.flag = -1
+            # self.end_tar = self.get_future_pos(target_position, [self.vx, self.vz], self.max_steps)
+            # self.target = self.get_future_pos(target_position, [self.vx, self.vz], self.target_step)
+            # print('*',self.target)
+            return np.array([0, 0, 0, 0, 0, 0])
+        if self.flag == -1:
+            self.vx = (target_position[0]-self.stx)/self.num
+            self.vz = (target_position[2]-self.stz)/self.num
+            self.end_tar = predict_pos(target_position, [self.vx * 12, self.vz * 12], max(0, self.max_steps - self.num))
+            self.target = predict_pos(target_position, [self.vx * 12, self.vz * 12], max(0, self.target_step - self.num))
+            dir_future = relative_dir(
+                {'x': self.target[0], 'y': self.target[2]},
+                {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
+                True
+            )
+            dir_end = relative_dir(
+                {'x': self.end_tar[0], 'y': self.end_tar[2]},
+                {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
+                True
+            )
+            # print(self.num, target_position)
+            if self.num == self.target_step:
+                if np.linalg.norm(np.array(target_position) - np.array(self.target)) > 0.01:
+                    print('!target',self.target, '\n\t', target_position)
+                    exit(1)
+            elif self.num == self.max_steps-1:
+                if np.linalg.norm(np.array(target_position) - np.array(self.end_tar)) > 0.01:
+                    print('!end',self.end_tar, '\n\t', target_position)
+                    exit(1)
+
+            my_obs = np.hstack((
+                n_angle, self.target, obstacle1_position,
+                calc.LastPos(n_angle), 
+                calc.WristPos(n_angle),
+                calc.jointPos(n_angle),
+                calc.idlePos(self.target, obstacle1_position),
+                [self.vx * 12, 0, self.vz * 12],
+                [dir_future, dir_end],
+            )).reshape(1, -1)
         
-        obs_angle = np.arctan2(obstacle1_position[1], obstacle1_position[0])
-        target_angle = np.arctan2(target_position[1], target_position[0])
-        if obs_angle - target_angle > 0.05:
-            action, _ = self.model_r.predict(my_obs)
-        else:
-            action, _ = self.model_l.predict(my_obs)
-        return np.reshape(action, (6, ))
+            obs_angle = np.arctan2(obstacle1_position[1], obstacle1_position[0])
+            target_angle = np.arctan2(target_position[1], target_position[0])
+            if self.num == 94:
+                print("change model")
+            if self.num <= 94:
+                if dir_future >= 0:
+                    action, _ = self.model_r.predict(my_obs[:,:42])
+                else:
+                    action, _ = self.model_l.predict(my_obs[:,:42])
+            else:
+                action, _ = self.model_end.predict(my_obs)  
+            if self.get_n_dis(n_angle)==True:
+                return np.array([0, 0, 0, 0, 0, 0])
+            return np.reshape(action, (6, ))

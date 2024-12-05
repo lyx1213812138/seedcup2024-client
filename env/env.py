@@ -9,11 +9,13 @@ import gymnasium as gym
 from ccalc import Calc
 from .reward import reward
 from .utils import predict_pos, relative_dir, next_tar_step
+import random
+from team_algorithm import MyCustomAlgorithm
 
 calc = Calc()
 
 class Env(gym.Env):
-    def __init__(self,is_senior=False,seed=123, gui=False, pos='all'):
+    def __init__(self,is_senior=False,seed=423, gui=False, pos='all'):
         super().__init__()
         self.reward = reward
         self.pos = pos
@@ -32,7 +34,8 @@ class Env(gym.Env):
         self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(1, 47), dtype=np.float64)
         self.metadata = {'render.modes': []}
 
-        self.target_step = 120 # 未来目标位置的步数
+        self.target_step = 94 # 未来目标位置的步数
+        self.prior_plan = MyCustomAlgorithm()
 
         self.init_env()
 
@@ -68,9 +71,10 @@ class Env(gym.Env):
         neutral_angle = [x * math.pi / 180 for x in neutral_angle]
         # TEST
         # self.target_position = predict_pos(self.target_position, self.random_velocity, 120)
-        # self.step_num = 100
+        # self.step_num = 120
         # idle_angle = calc.idlePos(self.target_position, self.obstacle1_position)
-        # neutral_angle = [(x * 2 - 1) * math.pi for x in idle_angle] + [0, 0]
+        # neutral_angle = [(x * 2 - 1) * math.pi + random.uniform(-0.1, 0.1) for x in idle_angle] + [0, 0]
+        # print(neutral_angle)
         
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=neutral_angle)
 
@@ -98,7 +102,8 @@ class Env(gym.Env):
 
         for _ in range(100):
             self.p.stepSimulation()
-            # if self.get_dis() <= 0.05:
+            # self.reward(self)
+            # if self.terminated:
             #     print('reset')
             #     return self.reset()
         
@@ -111,7 +116,7 @@ class Env(gym.Env):
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         obstacle1_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
     
-        future_tar_pos = predict_pos(target_position, self.random_velocity, next_tar_step(self.step_num, self.target_step, self.max_steps))
+        future_tar_pos = predict_pos(target_position, self.random_velocity, max(0, self.target_step-self.step_num))
         end_tar_pos = predict_pos(target_position, self.random_velocity, max(0, self.max_steps-self.step_num))
         dir_future = relative_dir(
             {'x': future_tar_pos[0], 'y': future_tar_pos[1]},
@@ -143,12 +148,21 @@ class Env(gym.Env):
             return self.reset_episode()
         
         self.step_num += 1
+
+        # TEST
+        if self.step_num <= self.target_step:
+            action = self.prior_plan.get_action(self.get_observation())
+
         joint_angles = [self.p.getJointState(self.fr5, i)[0] for i in range(1, 7)]
         action = np.clip(action, -1, 1)
         fr5_joint_angles = np.array(joint_angles) + (np.array(action[:6]) / 180 * np.pi)
         gripper = np.array([0, 0])
         angle_now = np.hstack([fr5_joint_angles, gripper])
         reward = self.reward(self)
+        # TEST
+        if self.step_num <= self.target_step:
+            reward = 0
+            
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=angle_now)
 
         for _ in range(20):

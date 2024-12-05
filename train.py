@@ -16,7 +16,7 @@ n_training_envs = 5
 n_eval_envs = 10
 
 # Create log dir where evaluation results will be saved
-eval_log_dir = "./ppo_eval_logs_47/test"
+eval_log_dir = "./ppo_eval_logs_47/end2"
 os.makedirs(eval_log_dir, exist_ok=True)
 
 # Initialize a vectorized training environment with default parameters
