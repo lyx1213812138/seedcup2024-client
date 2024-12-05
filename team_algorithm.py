@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import math
 from time import sleep
 import os
-from env.utils import relative_dir, predict_pos
+from env.utils import relative_dir, predict_pos, next_tar_step
 
 #DH参数
 a=[0 , -0.425 , -0.395 ,0 , 0 , 0]
@@ -247,8 +247,8 @@ class MyCustomAlgorithm(BaseAlgorithm):
         if self.flag == -1:
             self.vx = (target_position[0]-self.stx)/self.num
             self.vz = (target_position[2]-self.stz)/self.num
-            self.end_tar = predict_pos(target_position, [self.vx * 12, self.vz * 12], max(0, self.max_steps-1 - self.num))
-            self.target = predict_pos(target_position, [self.vx * 12, self.vz * 12], max(0, self.target_step - self.num))
+            self.end_tar = predict_pos(target_position, [self.vx * 12, self.vz * 12], max(0, self.max_steps - self.num))
+            self.target = predict_pos(target_position, [self.vx * 12, self.vz * 12], next_tar_step(self.num, self.target_step, self.max_steps))
             dir_future = relative_dir(
                 {'x': self.target[0], 'y': self.target[2]},
                 {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 

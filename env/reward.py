@@ -9,20 +9,21 @@ def reward(self) -> float:
 
     # XXX 计算距离reward
     obs = self.get_observation()
-    total_dis = np.linalg.norm(obs[0][0:6] - obs[0][36:42]) + self.get_dis(self.target_step)
+    # total_dis = np.linalg.norm(obs[0][0:6] - obs[0][36:42]) + self.get_dis(True)
+    total_dis = self.get_dis(True)
     # print('total_dis: ', total_dis)
     if self.last_dis >= 0:
         reward += 500*(self.last_dis - total_dis)
     self.last_dis = total_dis
 
     # XXX 接近障碍物
-    dis = calc.near_obs(self.get_observation(), self.get_obs_dis())
-    if self.last_obs_dis > 0:
-        if dis < 0.2:
-            reward -= 500*(self.last_obs_dis - dis)
-        elif dis < 0.25:
-            reward -= 200*(self.last_obs_dis - dis)
-    self.last_obs_dis = dis
+    # dis = calc.near_obs(self.get_observation(), self.get_obs_dis())
+    # if self.last_obs_dis > 0:
+    #     if dis < 0.2:
+    #         reward -= 500*(self.last_obs_dis - dis)
+    #     elif dis < 0.25:
+    #         reward -= 200*(self.last_obs_dis - dis)
+    # self.last_obs_dis = dis
 
     # 获取与桌子和障碍物的接触点
     table_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.table)
@@ -35,7 +36,7 @@ def reward(self) -> float:
                 # XXX contact
                 reward = -300
                 self.obstacle_contact = True
-            # reward = -10
+            reward = -10
 
     # 计算结束
     if self.get_dis() < 0.05 and self.step_num <= self.max_steps:
@@ -65,17 +66,18 @@ def reward(self) -> float:
 
     if end_reach or end_max_steps:
         if end_reach: # XXX reach target
-            if self.obstacle_contact:
-                reward = 300
-            else:
-                reward = 1000
-            self.terminated = True
+            # if self.obstacle_contact:
+            #     reward = 300
+            # else:
+            #     reward = 1000
             print("# Terminated for reaching target")
         elif end_max_steps: # XXX reach max steps
-            reward = self.success_reward
-            if self.success_reward < 30:
-                reward = -self.total_reward-100
+            # reward = self.success_reward * 10
+            # if self.success_reward < 30:
+            #     reward = -self.total_reward-100
             print("# Terminated for reaching max steps")
+        reward = self.success_reward * 10
+        self.total_reward += reward
         print("dis: ", self.get_dis(),
             'obs_dis: ', self.get_obs_dis(),
             'touch :' , self.obstacle_contact,

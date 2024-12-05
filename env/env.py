@@ -8,7 +8,7 @@ from scipy.spatial.transform import Rotation as R
 import gymnasium as gym
 from ccalc import Calc
 from .reward import reward
-from .utils import predict_pos, relative_dir
+from .utils import predict_pos, relative_dir, next_tar_step
 
 calc = Calc()
 
@@ -66,7 +66,11 @@ class Env:
         neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
         neutral_angle = [x * math.pi / 180 for x in neutral_angle]
         # TEST
-        # neutral_angle = calc.idlePos(self.target_position, self.obstacle1_position)
+        # self.target_position = predict_pos(self.target_position, self.random_velocity, 120)
+        # self.step_num = 100
+        # idle_angle = calc.idlePos(self.target_position, self.obstacle1_position)
+        # neutral_angle = [(x * 2 - 1) * math.pi for x in idle_angle] + [0, 0]
+        
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=neutral_angle)
 
         dir = relative_dir(
@@ -93,6 +97,10 @@ class Env:
 
         for _ in range(100):
             self.p.stepSimulation()
+            # if self.get_dis() <= 0.05:
+            #     print('reset')
+            #     return self.reset()
+        
 
         return (self.get_observation(), self._get_info())
 
@@ -102,7 +110,7 @@ class Env:
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         obstacle1_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
     
-        future_tar_pos = predict_pos(target_position, self.random_velocity, max(0, self.target_step-self.step_num))
+        future_tar_pos = predict_pos(target_position, self.random_velocity, next_tar_step(self.step_num, self.target_step, self.max_steps))
         end_tar_pos = predict_pos(target_position, self.random_velocity, max(0, self.max_steps-self.step_num))
         dir_future = relative_dir(
             {'x': future_tar_pos[0], 'y': future_tar_pos[1]},
@@ -153,30 +161,30 @@ class Env:
             self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, -self.random_velocity[1]])
 
         # TEST 查看100步时的target_position
-        if self.step_num == self.target_step:
-            tp = np.array(target_position)
-            v = [self.random_velocity[0], 0, self.random_velocity[1]]
-            if np.linalg.norm(predict_pos(self.target_position, self.random_velocity, self.target_step) - tp) > 0.03:
-                print('target position error: ', self.predict_pos, tp)
-                print('start :', self.target_position, 'velocity: ', v)
-                exit(1)
+        # if self.step_num == self.target_step:
+        #     tp = np.array(target_position)
+        #     v = [self.random_velocity[0], 0, self.random_velocity[1]]
+        #     if np.linalg.norm(predict_pos(self.target_position, self.random_velocity, self.target_step) - tp) > 0.03:
+        #         print('target position error: ', self.predict_pos, tp)
+        #         print('start :', self.target_position, 'velocity: ', v)
+        #         exit(1)
 
         return (self.get_observation(), reward, self.terminated, self.terminated, self._get_info())
         # return self.observation
 
 
     # step!=0: 抓手位置和step步(一共走了)的目标位置的距离, 如果 now step > step 则按照当前目标位置
-    def get_dis(self, step=-1): 
-        if step == -1:
-            step = self.step_num
+    def get_dis(self, if_future=False): 
         gripper_pos = self.p.getLinkState(self.fr5, 6)[0]
         relative_position = np.array([0, 0, 0.15])
         rotation = R.from_quat(self.p.getLinkState(self.fr5, 7)[1])
         rotated_relative_position = rotation.apply(relative_position)
         gripper_centre_pos = np.array(gripper_pos) + rotated_relative_position
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
+        if not if_future:
+            return np.linalg.norm(gripper_centre_pos - target_position)
         return np.linalg.norm(gripper_centre_pos 
-            - predict_pos(target_position, self.random_velocity, max(0, step-self.step_num)))
+            - predict_pos(target_position, self.random_velocity, next_tar_step(self.step_num, self.target_step, self.max_steps)))
 
     def get_obs_dis(self):
         gripper_pos = self.p.getLinkState(self.fr5, 6)[0]

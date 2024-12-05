@@ -33,3 +33,12 @@ def relative_dir(pos1:dict[str, float], pos2:dict[str, float], use_int=False) ->
     elif angle1 - angle2 < 0:
         return 'left' if not use_int else -1
     return 'center'
+
+
+def next_tar_step(now, tar1, max):
+  tar = [tar1, (max + tar1) / 2, max]
+  for t in tar:
+    if t >= now:
+      return t - now
+  return 0
+  

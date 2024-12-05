@@ -5,6 +5,10 @@ import pybullet_data
 import math
 from pybullet_utils import bullet_client
 from scipy.spatial.transform import Rotation as R
+from ccalc import Calc
+from env.utils import predict_pos
+
+calc = Calc()
 
 class Env:
     def __init__(self,is_senior,seed, gui=False, pos='all'):
@@ -36,15 +40,23 @@ class Env:
         self.success_reward = 0
         self.terminated = False
         self.obstacle_contact = False
-        neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
-        neutral_angle = [x * math.pi / 180 for x in neutral_angle]
-        self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=neutral_angle)
 
         self.goalx = np.random.uniform(-0.2, 0.2, 1)
         self.goaly = np.random.uniform(0.8, 0.9, 1)
         self.goalz = np.random.uniform(0.1, 0.3, 1)
         self.target_position = [self.goalx[0], self.goaly[0], self.goalz[0]]
         self.obstacle1_position = [np.random.uniform(-0.2, 0.2, 1) + self.goalx[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
+        self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+
+        neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
+        neutral_angle = [x * math.pi / 180 for x in neutral_angle]
+        # TEST
+        # self.target_position = predict_pos(self.target_position, self.random_velocity, 100)
+        # self.step_num = 120
+        # idle_angle = calc.idlePos(self.target_position, self.obstacle1_position)
+        # neutral_angle = [(x * 2 - 1) * math.pi for x in idle_angle] + [0, 0]
+        
+        self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=neutral_angle)
 
         obs_angle = np.arctan2(self.obstacle1_position[1], self.obstacle1_position[0][0])
         target_angle = np.arctan2(self.target_position[1], self.target_position[0])
@@ -64,11 +76,14 @@ class Env:
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
 
         # 设置目标朝x z平面赋予随机速度
-        self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
         self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, self.random_velocity[1]])
+
         
         for _ in range(100):
             self.p.stepSimulation()
+            # if self.get_dis() <= 0.05:
+            #     print('reset')
+            #     return self.reset()
 
         return self.get_observation()
 
