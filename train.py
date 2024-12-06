@@ -17,7 +17,7 @@ n_eval_envs = 10
 
 # Create log dir where evaluation results will be saved
 # eval_log_dir = "./ppo_eval_logs_47/end2"
-load_path = os.path.join(os.path.dirname(__file__),  "ppo_eval_logs_42/batch256/left_perfect/best_model2.zip")
+load_path = os.path.join(os.path.dirname(__file__),  "ppo_eval_logs_42/batch256/left_perfect/best_model.zip")
 eval_log_dir = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_42/batch256/left_perfect/best_model2.zip")
 os.makedirs(eval_log_dir, exist_ok=True)
 
