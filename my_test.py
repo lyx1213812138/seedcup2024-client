@@ -12,7 +12,7 @@ pause = False
 
 def main(algorithm):
     global pause, env
-    env = Env(is_senior=False,seed=10430,gui=True, pos='center')
+    env = Env(is_senior=False,seed=44444,gui=True, pos='center')
     done = False
     printed = True
     while True:

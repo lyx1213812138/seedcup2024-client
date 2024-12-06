@@ -12,8 +12,8 @@ import env
 import my_train_test as my_test
 
 env_id = "myenv-v0"
-n_training_envs = 5
-n_eval_envs = 10
+n_training_envs = 3
+n_eval_envs = 5
 
 # Create log dir where evaluation results will be saved
 eval_log_dir = "./ppo_eval_logs_47/end2"
