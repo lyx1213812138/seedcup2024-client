@@ -38,5 +38,5 @@ def relative_dir(pos1:dict[str, float], pos2:dict[str, float], use_int=False) ->
 def next_tar_step(now, tar1, max):
   if now <= tar1:
     return tar1 - now 
-  return min(max, now + 1)
+  return min(max, now + 1)-now
   

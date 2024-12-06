@@ -168,7 +168,8 @@ class BaseAlgorithm(ABC):
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
         path_right = os.path.join(os.path.dirname(__file__), "zip/left_model")
-        path_left = os.path.join(os.path.dirname(__file__), "zip/right_model")
+        # path_left = os.path.join(os.path.dirname(__file__), "zip/right_model")
+        path_left = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_42\\batch256\\left_perfect\\best_model.zip")
         # path_tot = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_47/test/best_model.zip")
         path_end = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_47/end2/best_model.zip")
         # print("ppo load path: ", path_tot, path_end)
