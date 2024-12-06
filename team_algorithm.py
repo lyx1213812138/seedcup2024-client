@@ -260,8 +260,18 @@ class MyCustomAlgorithm(BaseAlgorithm):
                 {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
                 True
             )
+            if self.num == 15:
+                print("dir", dir_future, dir_end)
+            
+            # TODO 如果方向不一致, 改变目标
+            real_target = self.target
+            real_dir = dir_future
+            if dir_future != dir_end:
+                real_target = self.end_tar
+                real_dir = dir_end
+
             # print(self.num, target_position)
-            if self.num == self.target_step:
+            if self.num == self.target_step and dir_end == dir_future:
                 if np.linalg.norm(np.array(target_position) - np.array(self.target)) > 0.01:
                     print('!target',self.target, '\n\t', target_position)
                     exit(1)
@@ -271,11 +281,11 @@ class MyCustomAlgorithm(BaseAlgorithm):
                     exit(1)
 
             my_obs = np.hstack((
-                n_angle, self.target, obstacle1_position,
+                n_angle, real_target, obstacle1_position,
                 calc.LastPos(n_angle), 
                 calc.WristPos(n_angle),
                 calc.jointPos(n_angle),
-                calc.idlePos(self.target, obstacle1_position),
+                calc.idlePos(real_target, obstacle1_position),
                 [self.vx * 12, 0, self.vz * 12],
                 [dir_future, dir_end],
             )).reshape(1, -1)
@@ -285,7 +295,7 @@ class MyCustomAlgorithm(BaseAlgorithm):
             if self.num == 94:
                 print("change model")
             if self.num <= 94:
-                if dir_future >= 0:
+                if real_dir >= 0:
                     action, _ = self.model_r.predict(my_obs[:,:42])
                 else:
                     action, _ = self.model_l.predict(my_obs[:,:42])

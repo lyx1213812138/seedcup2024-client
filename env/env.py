@@ -97,7 +97,12 @@ class Env(gym.Env):
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
 
         # 设置目标朝x z平面赋予随机速度
-        self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+        # self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+        # TEST
+        self.random_velocity = np.random.uniform(0.00, 0.02, 2)
+        if self.random_velocity[0] < 0.01:
+            self.random_velocity = np.random.uniform(-0.02, -0.01, 2)
+
         self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, self.random_velocity[1]])
 
         for _ in range(100):
@@ -128,6 +133,8 @@ class Env(gym.Env):
             {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
             True
         )
+        if not ((dir_future == 'left') == (dir_end == 'left')):
+            future_tar_pos = end_tar_pos
         # XXX observation        
         self.observation = np.hstack((
             obs_joint_angles, # [0:6] # 机械臂角度
