@@ -2,7 +2,7 @@ from std_env import Env
 from zip.team_algorithm import MyCustomAlgorithm
 
 def main(algorithm):
-    env = Env(is_senior=False,seed=122,gui=True, pos='all')
+    env = Env(is_senior=False,seed=122,gui=True)
     done = False
     num_episodes = 100
     final_score = 0

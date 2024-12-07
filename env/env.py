@@ -15,7 +15,7 @@ from team_algorithm import MyCustomAlgorithm
 calc = Calc()
 
 class Env(gym.Env):
-    def __init__(self,is_senior=False,seed=423, gui=False, pos='all'):
+    def __init__(self,is_senior=False,seed=423, gui=False, pos='left'):
         super().__init__()
         self.reward = reward
         self.pos = pos
@@ -79,26 +79,16 @@ class Env(gym.Env):
         
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=neutral_angle)
 
-        dir = relative_dir(
-            {'x': self.obstacle1_position[0][0], 'y': self.obstacle1_position[1]}, 
-            {'x': self.target_position[0], 'y': self.target_position[1]}
-        )
-        if self.pos == 'right':
-            if dir == 'left':
-                self.obstacle1_position[0] = self.target_position[0] - 0.1
-        elif self.pos == 'center':
-            if dir != 'center':
-                self.obstacle1_position[0] = self.target_position[0]
-        elif self.pos == 'left':
-            if dir == 'right':
-                self.obstacle1_position[0] = self.target_position[0]
-        # print("1118", self.obstacle1_position, self.target_position)
 
         self.p.resetBasePositionAndOrientation(self.target, self.target_position, [0, 0, 0, 1])
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
 
         # 设置目标朝x z平面赋予随机速度
         self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+        # XXX vx > 0
+        if self.random_velocity[0] < 0:
+            self.random_velocity = -self.random_velocity
+            
         self.real_velocity = self.random_velocity
         # TEST
         # self.random_velocity = np.random.uniform(0.00, 0.02, 2)
@@ -106,6 +96,25 @@ class Env(gym.Env):
         #     self.random_velocity = np.random.uniform(-0.02, -0.01, 2)
 
         self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, self.random_velocity[1]])
+
+        future_tar_pos = predict_pos(self.target_position, self.random_velocity, self.target_step)
+        dir = relative_dir(
+            {'x': future_tar_pos[0], 'y': future_tar_pos[1]},
+            {'x': self.obstacle1_position[0], 'y': self.obstacle1_position[1]}, 
+        )
+        if self.pos == 'right':
+            if dir == 'left':
+                self.obstacle1_position[0] = future_tar_pos[0]
+        elif self.pos == 'left':
+            if dir != 'left':
+                # print('!')
+                self.obstacle1_position[0] = future_tar_pos[0] - 0.15
+        # print(relative_dir(
+        #     {'x': future_tar_pos[0], 'y': future_tar_pos[1]},
+        #     {'x': self.obstacle1_position[0], 'y': self.obstacle1_position[1]}, 
+        # ))
+        
+
 
         for _ in range(100):
             self.p.stepSimulation()
@@ -158,7 +167,7 @@ class Env(gym.Env):
 
         # TEST
         if self.step_num <= self.target_step:
-            action = self.prior_plan.get_action(self.get_observation())
+            action = self.prior_plan.get_action((self.get_observation(), None))
 
         joint_angles = [self.p.getJointState(self.fr5, i)[0] for i in range(1, 7)]
         action = np.clip(action, -1, 1)
@@ -180,11 +189,11 @@ class Env(gym.Env):
         if target_position[0] > 0.5 or target_position[0] < -0.5:
             self.p.resetBaseVelocity(self.target, linearVelocity=[-self.random_velocity[0], 0, self.random_velocity[1]])
             self.real_velocity = [-self.random_velocity[0], self.random_velocity[1]]
-            print('change velocity')
+            # print('change velocity')
         if target_position[2] > 0.5 or target_position[2] < 0.1:
             self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, -self.random_velocity[1]])
             self.real_velocity = [self.random_velocity[0], -self.random_velocity[1]]
-            print('change velocity')
+            # print('change velocity')
 
         # TEST 查看100步时的target_position
         # if self.step_num == self.target_step:

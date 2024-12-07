@@ -42,7 +42,7 @@ def reward(self) -> float:
 
     # 计算结束
     # TEST
-    if self.get_dis() < 0.01 and self.step_num <= self.max_steps:
+    if self.get_dis() < 0.05 and self.step_num <= self.max_steps:
         self.success_reward = 100
         if self.obstacle_contact:
             if self.is_senior:
@@ -80,23 +80,24 @@ def reward(self) -> float:
             #     reward = -self.total_reward-100
             print("# Terminated for reaching max steps")
         reward = self.success_reward * 7
-        if self.success_reward < 50:
-            reward = -self.total_reward-100
         if self.step_num >= self.target_step:
+            reward = reward * self.front_dis * 10
+            if self.success_reward < 50:
+                reward = -self.total_reward-100
             self.total_reward += reward
             print("dis: ", self.get_dis(),
                 'obs_dis: ', self.get_obs_dis(),
                 'touch: ' , self.obstacle_contact,
                 'dir: ', obs[0][45:47],
                 'step_num: ', self.step_num,
+                'front_dis: ', self.front_dis,
                 '\n\ttotal_reward: ', self.total_reward,
                 '\n\tsuccess_reward: ', self.success_reward)
 
     # XXX calc reward
     if self.step_num <= self.target_step + 1:
         reward = 0
-    elif self.step_num <= self.target_step + 5 and end_reach:
-        reward = 100
-        print("not reward for start model")
+        self.front_dis = self.get_dis()
+    reward = reward * self.front_dis * 10
     self.total_reward += reward
     return reward

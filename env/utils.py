@@ -26,7 +26,7 @@ def predict_pos(now, v, step):
 def relative_dir(pos1:dict[str, float], pos2:dict[str, float], use_int=False) -> str:
     angle1 = np.arctan2(pos1['y'], pos1['x'])
     angle2 = np.arctan2(pos2['y'], pos2['x'])
-    if abs(angle1 - angle2) < 0.2:
+    if abs(angle1 - angle2) < 0.1:
         return 'center' if not use_int else 0
     elif angle1 - angle2 > 0:
         return 'right' if not use_int else 1
@@ -38,5 +38,5 @@ def relative_dir(pos1:dict[str, float], pos2:dict[str, float], use_int=False) ->
 def next_tar_step(now, tar1, max):
   if now <= tar1:
     return tar1 - now 
-  return min(max, now + 1)
+  return min(max, now + 1) - now
   

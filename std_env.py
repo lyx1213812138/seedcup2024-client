@@ -6,13 +6,13 @@ import math
 from pybullet_utils import bullet_client
 from scipy.spatial.transform import Rotation as R
 from ccalc import Calc
-from env.utils import predict_pos
+from env.utils import predict_pos, relative_dir
 import random
 
 calc = Calc()
 
 class Env:
-    def __init__(self,is_senior,seed, gui=False, pos='all'):
+    def __init__(self,is_senior,seed, gui=False, pos='left'):
         self.pos = pos
         self.seed = seed
         self.is_senior = is_senior
@@ -22,6 +22,9 @@ class Env:
         self.p.setGravity(0, 0, -9.81)
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+
+        self.target_step = 94
+        
         self.init_env()
 
     def init_env(self):
@@ -34,6 +37,9 @@ class Env:
         self.target = self.p.createMultiBody(baseMass=0, baseCollisionShapeIndex=collision_target_id, basePosition=[0.5, 0.8, 2])
         collision_obstacle_id = self.p.createCollisionShape(shapeType=p.GEOM_SPHERE, radius=0.1)
         self.obstacle1 = self.p.createMultiBody(baseMass=0, baseCollisionShapeIndex=collision_obstacle_id, basePosition=[0.5, 0.5, 2])
+
+        my_ball_id = self.p.createCollisionShape(shapeType=p.GEOM_SPHERE, radius=0.01)
+        self.my_ball = self.p.createMultiBody(baseMass=0, baseCollisionShapeIndex=my_ball_id, basePosition=[0.5, 0.5, 2])
         self.reset()
 
     def reset(self):
@@ -46,7 +52,7 @@ class Env:
         self.goaly = np.random.uniform(0.8, 0.9, 1)
         self.goalz = np.random.uniform(0.1, 0.3, 1)
         self.target_position = [self.goalx[0], self.goaly[0], self.goalz[0]]
-        self.obstacle1_position = [np.random.uniform(-0.2, 0.2, 1) + self.goalx[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
+        self.obstacle1_position = [(np.random.uniform(-0.2, 0.2, 1) + self.goalx[0])[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
         self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
 
         neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
@@ -60,19 +66,23 @@ class Env:
         
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=neutral_angle)
 
-        obs_angle = np.arctan2(self.obstacle1_position[1], self.obstacle1_position[0][0])
-        target_angle = np.arctan2(self.target_position[1], self.target_position[0])
-
+        future_tar_pos = predict_pos(self.target_position, self.random_velocity, self.target_step)
+        dir = relative_dir(
+            {'x': future_tar_pos[0], 'y': future_tar_pos[1]},
+            {'x': self.obstacle1_position[0], 'y': self.obstacle1_position[1]}, 
+        )
         if self.pos == 'right':
-            if obs_angle - target_angle < 0:
-                self.obstacle1_position[0] = self.target_position[0] - 0.1
-        elif self.pos == 'center':
-            if abs(obs_angle - target_angle) > 0.2:
-                self.obstacle1_position[0] = self.target_position[0]
+            if dir == 'left':
+                self.obstacle1_position[0] = future_tar_pos[0]
         elif self.pos == 'left':
-            if obs_angle - target_angle > 0:
-                self.obstacle1_position[0] = self.target_position[0]
-        # print("1118", self.obstacle1_position, self.target_position)
+            if dir != 'left':
+                print('!')
+                self.obstacle1_position[0] = future_tar_pos[0] - 0.15
+        print(relative_dir(
+            {'x': future_tar_pos[0], 'y': future_tar_pos[1]},
+            {'x': self.obstacle1_position[0], 'y': self.obstacle1_position[1]}, 
+        ))
+        print("1118", self.obstacle1_position, future_tar_pos)
 
         self.p.resetBasePositionAndOrientation(self.target, self.target_position, [0, 0, 0, 1])
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
@@ -95,8 +105,9 @@ class Env:
         obs_joint_angles = ((np.array(joint_angles, dtype=np.float32) / 180) + 1) / 2
         obstacle1_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
+        func = lambda pos : self.p.resetBasePositionAndOrientation(self.my_ball, pos, [0, 0, 0, 1])
         self.observation = np.hstack((obs_joint_angles, target_position, obstacle1_position)).flatten().reshape(1, -1)
-        return self.observation
+        return (self.observation, func)
 
     def step(self, action):
         if self.terminated:
@@ -118,8 +129,10 @@ class Env:
         # 检查目标位置并反向速度
         target_position = self.p.getBasePositionAndOrientation(self.target)[0]
         if target_position[0] > 0.5 or target_position[0] < -0.5:
+            print('change v')
             self.p.resetBaseVelocity(self.target, linearVelocity=[-self.random_velocity[0], 0, self.random_velocity[1]])
         if target_position[2] > 0.5 or target_position[2] < 0.1:
+            print('change v')
             self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, -self.random_velocity[1]])
 
         return self.observation

@@ -167,7 +167,7 @@ class BaseAlgorithm(ABC):
 
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
-        path_right = os.path.join(os.path.dirname(__file__), "zip/left_model")
+        path_right = os.path.join(os.path.dirname(__file__), "zip/right_model")
         path_left = os.path.join(os.path.dirname(__file__), "zip/right_model")
         # path_tot = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_47/test/best_model.zip")
         path_end = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_47/end2/best_model.zip")
@@ -216,6 +216,8 @@ class MyCustomAlgorithm(BaseAlgorithm):
         return now_tar_pos
             
     def get_action(self, observation):
+        set_ball_pos = observation[1]
+        observation = observation[0]
         n_angle = observation[0, :6]
         target_position = observation[0][6:9]
         obstacle1_position = observation[0][9:12]
@@ -223,54 +225,51 @@ class MyCustomAlgorithm(BaseAlgorithm):
         self.num += 1
         if self.flag == 0:
             self.n_obs = obstacle1_position
-            self.stx=target_position[0]
-            self.stz=target_position[2]
+            self.st = target_position
             self.target = target_position
             self.flag = 1
+            self.num = 0
             return np.array([0, 0, 0, 0, 0, 0])
         if self.n_obs[0] != obstacle1_position[0]:
+            # print('restart')
             self.n_obs = obstacle1_position
-            self.stx=target_position[0]
-            self.stz=target_position[2]
+            self.st = target_position
             self.target = target_position
             self.flag = 0
             self.num = 0
             return np.array([0, 0, 0, 0, 0, 0])
         if self.flag == 1:
-            self.vx = target_position[0]-self.stx
-            self.vz = target_position[2]-self.stz
-            self.flag = -1
-            # self.end_tar = self.get_future_pos(target_position, [self.vx, self.vz], self.max_steps)
-            # self.target = self.get_future_pos(target_position, [self.vx, self.vz], self.target_step)
-            # print('*',self.target)
-            return np.array([0, 0, 0, 0, 0, 0])
-        if self.flag == -1:
-            self.vx = (target_position[0]-self.stx)/self.num
-            self.vz = (target_position[2]-self.stz)/self.num
-            self.end_tar = predict_pos(target_position, [self.vx * 12, self.vz * 12], max(0, self.max_steps - self.num))
-            self.target = predict_pos(target_position, [self.vx * 12, self.vz * 12], max(0, self.target_step - self.num))
-            dir_future = relative_dir(
+            self.vx = target_position[0]-self.st[0]
+            self.vz = target_position[2]-self.st[2]
+            self.end_tar = predict_pos(self.st, [self.vx * 12, self.vz * 12], self.max_steps)
+            self.target = predict_pos(self.st, [self.vx * 12, self.vz * 12], self.target_step)
+            self.dir_future = relative_dir(
                 {'x': self.target[0], 'y': self.target[2]},
                 {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
                 True
             )
-            dir_end = relative_dir(
+            self.dir_end = relative_dir(
                 {'x': self.end_tar[0], 'y': self.end_tar[2]},
                 {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
                 True
             )
-            if self.num == 15:
-                print("dir", dir_future, dir_end)
-            
+            print("dir", self.dir_future, self.dir_end)
+            self.flag = -1
+            return np.array([0, 0, 0, 0, 0, 0])
+        if self.flag == -1:
             # TODO 如果方向不一致, 改变目标
-            real_target = self.target
-            real_dir = dir_future
-            if dir_future != dir_end:
-                real_target = self.end_tar
-                real_dir = dir_end
+            if self.num <= self.target_step and self.dir_future == self.dir_end:
+                real_target = self.target
+                real_dir = self.dir_future
+            elif self.dir_future != self.dir_end:
+                real_target = self.target
+                real_dir = self.dir_end
+            elif self.num > self.target_step:
+                real_target = target_position 
+                real_dir = self.dir_end
 
             # print(self.num, target_position)
-            if self.num == self.target_step and dir_end == dir_future:
+            if self.num == self.target_step:
                 if np.linalg.norm(np.array(target_position) - np.array(self.target)) > 0.01:
                     print('!target',self.target, '\n\t', target_position)
                     exit(1)
@@ -279,6 +278,8 @@ class MyCustomAlgorithm(BaseAlgorithm):
                     print('!end',self.end_tar, '\n\t', target_position)
                     exit(1)
 
+            if set_ball_pos != None:
+                set_ball_pos(real_target)
             my_obs = np.hstack((
                 n_angle, real_target, obstacle1_position,
                 calc.LastPos(n_angle), 
@@ -286,14 +287,14 @@ class MyCustomAlgorithm(BaseAlgorithm):
                 calc.jointPos(n_angle),
                 calc.idlePos(real_target, obstacle1_position),
                 [self.vx * 12, 0, self.vz * 12],
-                [dir_future, dir_end],
+                [self.dir_future, self.dir_end],
             )).reshape(1, -1)
         
             obs_angle = np.arctan2(obstacle1_position[1], obstacle1_position[0])
             target_angle = np.arctan2(target_position[1], target_position[0])
             if self.num == 94:
                 print("change model")
-            if self.num <= 94:
+            if self.num <= self.target_step:
                 if real_dir >= 0:
                     action, _ = self.model_r.predict(my_obs[:,:42])
                 else:
