@@ -28,6 +28,7 @@ class Env(gym.Env):
         self.p.setGravity(0, 0, -9.81)
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+        self.real_velocity = self.random_velocity
 
         self.action_space = gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float64)
         # XXX observation space
@@ -70,7 +71,7 @@ class Env(gym.Env):
         neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
         neutral_angle = [x * math.pi / 180 for x in neutral_angle]
         # TEST
-        # self.target_position = predict_pos(self.target_position, self.random_velocity, 120)
+        # self.target_position = predict_pos(self.target_position, self.real_velocity, 120)
         # self.step_num = 120
         # idle_angle = calc.idlePos(self.target_position, self.obstacle1_position)
         # neutral_angle = [(x * 2 - 1) * math.pi + random.uniform(-0.1, 0.1) for x in idle_angle] + [0, 0]
@@ -97,11 +98,12 @@ class Env(gym.Env):
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
 
         # 设置目标朝x z平面赋予随机速度
-        # self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+        self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+        self.real_velocity = self.random_velocity
         # TEST
-        self.random_velocity = np.random.uniform(0.00, 0.02, 2)
-        if self.random_velocity[0] < 0.01:
-            self.random_velocity = np.random.uniform(-0.02, -0.01, 2)
+        # self.random_velocity = np.random.uniform(0.00, 0.02, 2)
+        # if self.random_velocity[0] < 0.01:
+        #     self.random_velocity = np.random.uniform(-0.02, -0.01, 2)
 
         self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, self.random_velocity[1]])
 
@@ -121,8 +123,8 @@ class Env(gym.Env):
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         obstacle1_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
     
-        future_tar_pos = predict_pos(target_position, self.random_velocity, max(0, self.target_step-self.step_num))
-        end_tar_pos = predict_pos(target_position, self.random_velocity, max(0, self.max_steps-self.step_num))
+        future_tar_pos = predict_pos(target_position, self.real_velocity, max(0, self.target_step-self.step_num))
+        end_tar_pos = predict_pos(target_position, self.real_velocity, max(0, self.max_steps-self.step_num))
         dir_future = relative_dir(
             {'x': future_tar_pos[0], 'y': future_tar_pos[1]},
             {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
@@ -133,9 +135,7 @@ class Env(gym.Env):
             {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
             True
         )
-        if not ((dir_future == 'left') == (dir_end == 'left')):
-            future_tar_pos = end_tar_pos
-        # XXX observation        
+        
         self.observation = np.hstack((
             obs_joint_angles, # [0:6] # 机械臂角度
             future_tar_pos, obstacle1_position, # [6:12] # 环境物体位置
@@ -143,7 +143,7 @@ class Env(gym.Env):
             calc.WristPos(obs_joint_angles), # [15:18]
             calc.jointPos(obs_joint_angles), # [18:36]
             calc.idlePos(future_tar_pos, obstacle1_position), #[36:42] # 预测机械臂角度
-            [self.random_velocity[0], 0, self.random_velocity[1]], # [42:45] # 目标物体速度
+            [self.real_velocity[0], 0, self.real_velocity[1]], # [42:45] # 目标物体速度
             [dir_future, dir_end] # [45:47] # 未来目标位置和最终目标位置的方向
         )).flatten().reshape(1, -1)
         # print('obs: ', self.observation, self.observation.shape)
@@ -179,14 +179,17 @@ class Env(gym.Env):
         target_position = self.p.getBasePositionAndOrientation(self.target)[0]
         if target_position[0] > 0.5 or target_position[0] < -0.5:
             self.p.resetBaseVelocity(self.target, linearVelocity=[-self.random_velocity[0], 0, self.random_velocity[1]])
+            self.real_velocity = [-self.random_velocity[0], self.random_velocity[1]]
+            print('change velocity')
         if target_position[2] > 0.5 or target_position[2] < 0.1:
             self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, -self.random_velocity[1]])
+            self.real_velocity = [self.random_velocity[0], -self.random_velocity[1]]
+            print('change velocity')
 
         # TEST 查看100步时的target_position
         # if self.step_num == self.target_step:
         #     tp = np.array(target_position)
-        #     v = [self.random_velocity[0], 0, self.random_velocity[1]]
-        #     if np.linalg.norm(predict_pos(self.target_position, self.random_velocity, self.target_step) - tp) > 0.03:
+        #     if np.linalg.norm(predict_pos(self.target_position, self.real_velocity, self.target_step) - tp) > 0.03:
         #         print('target position error: ', self.predict_pos, tp)
         #         print('start :', self.target_position, 'velocity: ', v)
         #         exit(1)
@@ -206,7 +209,7 @@ class Env(gym.Env):
         if not if_future:
             return np.linalg.norm(gripper_centre_pos - target_position)
         return np.linalg.norm(gripper_centre_pos 
-            - predict_pos(target_position, self.random_velocity, next_tar_step(self.step_num, self.target_step, self.max_steps)))
+            - predict_pos(target_position, self.real_velocity, next_tar_step(self.step_num, self.target_step, self.max_steps)))
 
     def get_obs_dis(self):
         gripper_pos = self.p.getLinkState(self.fr5, 6)[0]
