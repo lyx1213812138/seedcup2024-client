@@ -168,6 +168,5 @@ class Calc:
         d3=self.disjo(p3,p4,ob)
         d4=self.disjo(p4,p5,ob)
         d5=self.disjo(p5,p6,ob)
-        if d1 <= 0.14 or d2 <= 0.14 or d3 <= 0.14 or d4 <= 0.14 or d5 <= 0.14:
-            return True
-        return False
+        x = np.min([d1,d2,d3,d4,d5])
+        print(x)

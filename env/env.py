@@ -23,7 +23,8 @@ class Env(gym.Env):
         self.seed = seed
         self.is_senior = is_senior
         self.step_num = 0
-        self.max_steps = 200
+        # TEST
+        self.max_steps = 120
         self.p = bullet_client.BulletClient(connection_mode=p.GUI if gui else p.DIRECT)
         self.p.setGravity(0, 0, -9.81)
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
@@ -32,7 +33,7 @@ class Env(gym.Env):
 
         self.action_space = gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float64)
         # XXX observation space
-        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(1, 47), dtype=np.float64)
+        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(1, 42), dtype=np.float64)
         self.metadata = {'render.modes': []}
 
         self.target_step = 94 # 未来目标位置的步数
@@ -57,6 +58,7 @@ class Env(gym.Env):
         self.step_num = 0
         self.success_reward = 0
         self.terminated = False
+        self.truncated = False
         self.obstacle_contact = False   
         self.last_dis = -1
         self.last_obs_dis = -1
@@ -86,8 +88,8 @@ class Env(gym.Env):
         # 设置目标朝x z平面赋予随机速度
         self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
         # XXX vx > 0
-        if self.random_velocity[0] < 0:
-            self.random_velocity = -self.random_velocity
+        # if self.random_velocity[0] < 0:
+        #     self.random_velocity = -self.random_velocity
             
         self.real_velocity = self.random_velocity
         # TEST
@@ -107,7 +109,6 @@ class Env(gym.Env):
                 self.obstacle1_position[0] = future_tar_pos[0]
         elif self.pos == 'left':
             if dir != 'left':
-                # print('!')
                 self.obstacle1_position[0] = future_tar_pos[0] - 0.15
         # print(relative_dir(
         #     {'x': future_tar_pos[0], 'y': future_tar_pos[1]},
@@ -144,6 +145,7 @@ class Env(gym.Env):
             {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
             True
         )
+        dir_vx = (self.real_velocity[0] > 0) * 2 - 1
         
         self.observation = np.hstack((
             obs_joint_angles, # [0:6] # 机械臂角度
@@ -152,22 +154,23 @@ class Env(gym.Env):
             calc.WristPos(obs_joint_angles), # [15:18]
             calc.jointPos(obs_joint_angles), # [18:36]
             calc.idlePos(future_tar_pos, obstacle1_position), #[36:42] # 预测机械臂角度
-            [self.real_velocity[0], 0, self.real_velocity[1]], # [42:45] # 目标物体速度
-            [dir_future, dir_end] # [45:47] # 未来目标位置和最终目标位置的方向
+            # [self.real_velocity[0], 0, self.real_velocity[1]], # [12:15] # 目标物体速度
+            # [dir_future, dir_end, dir_vx] # [15:18] # 未来目标位置和最终目标位置的方向
+            # [dir_future, dir_end] # [45:47] # 未来目标位置和最终目标位置的方向
         )).flatten().reshape(1, -1)
         # print('obs: ', self.observation, self.observation.shape)
         
         return self.observation
 
     def step(self, action):
-        if self.terminated:
+        if self.terminated or self.truncated:
             return self.reset_episode()
         
         self.step_num += 1
 
         # TEST
-        if self.step_num <= self.target_step:
-            action = self.prior_plan.get_action((self.get_observation(), None))
+        # if self.step_num <= self.target_step:
+        #     action = self.prior_plan.get_action((self.get_observation(), None))
 
         joint_angles = [self.p.getJointState(self.fr5, i)[0] for i in range(1, 7)]
         action = np.clip(action, -1, 1)
@@ -176,8 +179,8 @@ class Env(gym.Env):
         angle_now = np.hstack([fr5_joint_angles, gripper])
         reward = self.reward(self)
         # TEST
-        if self.step_num <= self.target_step:
-            reward = 0
+        # if self.step_num <= self.target_step:
+        #     reward = 0
             
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=angle_now)
 
@@ -203,7 +206,7 @@ class Env(gym.Env):
         #         print('start :', self.target_position, 'velocity: ', v)
         #         exit(1)
 
-        return (self.get_observation(), reward, self.terminated, self.terminated, self._get_info())
+        return (self.get_observation(), reward, self.terminated, self.truncated, self._get_info())
         # return self.observation
 
 

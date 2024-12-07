@@ -167,10 +167,10 @@ class BaseAlgorithm(ABC):
 
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
-        path_right = os.path.join(os.path.dirname(__file__), "zip/right_model")
-        path_left = os.path.join(os.path.dirname(__file__), "zip/right_model")
+        path_right = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_42/batch256/right_perfect/best_model.zip")
+        path_left = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_42/batch256/right_perfect/best_model.zip")
         # path_tot = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_47/test/best_model.zip")
-        path_end = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_47/end2/best_model.zip")
+        path_end = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_18/end2_x_g_0_left/best_model.zip")
         # print("ppo load path: ", path_tot, path_end)
         sleep(1)
         self.model_r = PPO.load(path_right, device="cpu")
@@ -289,6 +289,14 @@ class MyCustomAlgorithm(BaseAlgorithm):
                 [self.vx * 12, 0, self.vz * 12],
                 [self.dir_future, self.dir_end],
             )).reshape(1, -1)
+
+
+            dir_vx = (self.vx > 0) * 2 - 1
+            my_obs2 = np.hstack((
+                n_angle, real_target, obstacle1_position,
+                [self.vx * 12, 0, self.vz * 12],
+                [self.dir_future, self.dir_end, dir_vx],
+            )).reshape(1, -1)
         
             obs_angle = np.arctan2(obstacle1_position[1], obstacle1_position[0])
             target_angle = np.arctan2(target_position[1], target_position[0])
@@ -300,7 +308,7 @@ class MyCustomAlgorithm(BaseAlgorithm):
                 else:
                     action, _ = self.model_l.predict(my_obs[:,:42])
             else:
-                action, _ = self.model_end.predict(my_obs)  
+                action, _ = self.model_end.predict(my_obs2)  
             if self.get_n_dis(n_angle)==True:
                 return np.array([0, 0, 0, 0, 0, 0])
             return np.reshape(action, (6, ))

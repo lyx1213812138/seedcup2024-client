@@ -16,7 +16,7 @@ n_training_envs = 3
 n_eval_envs = 5
 
 # Create log dir where evaluation results will be saved
-eval_log_dir = "./ppo_eval_logs_47/end2_x_g_0_left"
+eval_log_dir = "./ppo_eval_logs_42/right"
 print('log path:', eval_log_dir)
 os.makedirs(eval_log_dir, exist_ok=True)
 
@@ -42,7 +42,7 @@ class my_log(BaseCallback):
 eval_callback = EvalCallback(eval_env, best_model_save_path=eval_log_dir,
                               log_path=eval_log_dir,
                               n_eval_episodes=5, deterministic=True,
-                              render=False, eval_freq=2000)
+                              render=False, eval_freq=500)
                               # callback_on_new_best=my_log())
 
 if len(sys.argv) > 1:
@@ -50,5 +50,5 @@ if len(sys.argv) > 1:
   model = PPO.load(load_path, train_env, verbose=1, tensorboard_log='./tensorboard/')
 else:
   model = PPO("MlpPolicy", train_env, verbose=1, tensorboard_log='./tensorboard/', 
-              batch_size=256, n_steps=2048, n_epochs=10)
+              batch_size=512, n_steps=2048, n_epochs=10)
 model.learn(50000000, callback=eval_callback)

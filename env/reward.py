@@ -9,16 +9,14 @@ def reward(self) -> float:
 
     # XXX 计算距离reward
     obs = self.get_observation()
-    # total_dis = np.linalg.norm(obs[0][0:6] - obs[0][36:42]) + self.get_dis(True)
     total_dis = self.get_dis()
     # print('total_dis: ', total_dis)
     if self.last_dis >= 0:
         reward += 500*(self.last_dis - total_dis)
     self.last_dis = total_dis
-    if total_dis < 0.05:
-        reward += 30
 
     # XXX 接近障碍物
+    # dis =  calc.collisionAngle(obs[0:6], obs[9:12])
     dis = calc.near_obs(self.get_observation(), self.get_obs_dis())
     if self.last_obs_dis > 0:
         if dis < 0.2:
@@ -36,9 +34,9 @@ def reward(self) -> float:
         if link_index not in [0, 1]:
             if not self.obstacle_contact:
                 # XXX contact
-                reward = -300
+                reward = -100
                 self.obstacle_contact = True
-            reward = -10
+            reward = -1
 
     # 计算结束
     # TEST
@@ -64,31 +62,30 @@ def reward(self) -> float:
                 self.success_reward *= 0.2 
             elif not self.is_senior:
                 self.success_reward *= 0.5                  
-        self.terminated = True
+        self.truncated = True
         end_max_steps = True
 
     if end_reach or end_max_steps:
         if end_reach: # XXX reach target
-            # if self.obstacle_contact:
-            #     reward = 300
-            # else:
-            #     reward = 1000
+            if self.obstacle_contact:
+                reward = 50
+            else:
+                reward = 100
             print("# Terminated for reaching target")
         elif end_max_steps: # XXX reach max steps
             # reward = self.success_reward * 10
             # if self.success_reward < 30:
             #     reward = -self.total_reward-100
             print("# Terminated for reaching max steps")
-        reward = self.success_reward * 7
+        # reward = self.success_reward * 7
         if self.step_num >= self.target_step:
-            reward = reward * self.front_dis * 10
-            if self.success_reward < 50:
-                reward = -self.total_reward-100
+            # reward = reward * self.front_dis * 10
+            # if self.success_reward < 30:
+            #     reward = min(-500, -self.total_reward-100)
             self.total_reward += reward
             print("dis: ", self.get_dis(),
                 'obs_dis: ', self.get_obs_dis(),
                 'touch: ' , self.obstacle_contact,
-                'dir: ', obs[0][45:47],
                 'step_num: ', self.step_num,
                 'front_dis: ', self.front_dis,
                 '\n\ttotal_reward: ', self.total_reward,
@@ -98,6 +95,7 @@ def reward(self) -> float:
     if self.step_num <= self.target_step + 1:
         reward = 0
         self.front_dis = self.get_dis()
-    reward = reward * self.front_dis * 10
+    if reward > 0:
+        reward = reward * self.front_dis * 10
     self.total_reward += reward
     return reward

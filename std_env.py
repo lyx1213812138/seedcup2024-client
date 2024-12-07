@@ -54,6 +54,9 @@ class Env:
         self.target_position = [self.goalx[0], self.goaly[0], self.goalz[0]]
         self.obstacle1_position = [(np.random.uniform(-0.2, 0.2, 1) + self.goalx[0])[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
         self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+        # TEST
+        # if self.random_velocity[0] > 0:
+        #     self.random_velocity[0] = -self.random_velocity[0]
 
         neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
         neutral_angle = [x * math.pi / 180 for x in neutral_angle]
