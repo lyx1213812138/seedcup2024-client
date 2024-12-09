@@ -4,7 +4,7 @@ import numpy as np
 from time import sleep, time
 from pynput import keyboard
 import threading
-from ccalc import Calc
+from env.ccalc import Calc
 
 calc = Calc()
 

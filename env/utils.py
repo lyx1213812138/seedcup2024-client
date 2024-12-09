@@ -23,7 +23,7 @@ def predict_pos(now, v, step):
 #    1
 # 1 在 2 的右边(right)
 # right = 1, left = -1, center = 0
-def relative_dir(pos1:dict[str, float], pos2:dict[str, float], use_int=False) -> str:
+def relative_dir(pos1, pos2, use_int=False):
     angle1 = np.arctan2(pos1['y'], pos1['x'])
     angle2 = np.arctan2(pos2['y'], pos2['x'])
     if abs(angle1 - angle2) < 0.1:

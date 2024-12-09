@@ -5,14 +5,14 @@ import pybullet_data
 import math
 from pybullet_utils import bullet_client
 from scipy.spatial.transform import Rotation as R
-from ccalc import Calc
 from env.utils import predict_pos, relative_dir
+from env.ccalc import Calc
 import random
 
 calc = Calc()
 
 class Env:
-    def __init__(self,is_senior,seed, gui=False, pos='left'):
+    def __init__(self,is_senior,seed, gui=False, pos='all'):
         self.pos = pos
         self.seed = seed
         self.is_senior = is_senior
@@ -79,7 +79,7 @@ class Env:
                 self.obstacle1_position[0] = future_tar_pos[0]
         elif self.pos == 'left':
             if dir != 'left':
-                print('!')
+                # print('!')
                 self.obstacle1_position[0] = future_tar_pos[0] - 0.15
         print(relative_dir(
             {'x': future_tar_pos[0], 'y': future_tar_pos[1]},
@@ -109,8 +109,10 @@ class Env:
         obstacle1_position = np.array(self.p.getBasePositionAndOrientation(self.obstacle1)[0])
         target_position = np.array(self.p.getBasePositionAndOrientation(self.target)[0])
         func = lambda pos : self.p.resetBasePositionAndOrientation(self.my_ball, pos, [0, 0, 0, 1])
+        # func(self.p.getLinkState(self.fr5, 3)[0])
         self.observation = np.hstack((obs_joint_angles, target_position, obstacle1_position)).flatten().reshape(1, -1)
         return (self.observation, func)
+        # return self.observation
 
     def step(self, action):
         if self.terminated:

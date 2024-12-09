@@ -2,7 +2,7 @@ from std_env import Env
 from team_algorithm import MyCustomAlgorithm
 
 def main(logger, algorithm = MyCustomAlgorithm()):
-    env = Env(is_senior=False,seed=10430,gui=False)
+    env = Env(is_senior=False,seed=1040,gui=False)
     done = False
     num_episodes = 15
     final_score = 0

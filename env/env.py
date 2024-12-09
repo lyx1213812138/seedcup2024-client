@@ -6,7 +6,7 @@ import math
 from pybullet_utils import bullet_client
 from scipy.spatial.transform import Rotation as R
 import gymnasium as gym
-from ccalc import Calc
+from .ccalc import Calc
 from .reward import reward
 from .utils import predict_pos, relative_dir, next_tar_step
 import random
@@ -15,7 +15,7 @@ from team_algorithm import MyCustomAlgorithm
 calc = Calc()
 
 class Env(gym.Env):
-    def __init__(self,is_senior=False,seed=423, gui=False, pos='left'):
+    def __init__(self,is_senior=False,seed=423, gui=False, pos='all'):
         super().__init__()
         self.reward = reward
         self.pos = pos
@@ -24,7 +24,7 @@ class Env(gym.Env):
         self.is_senior = is_senior
         self.step_num = 0
         # TEST
-        self.max_steps = 120
+        self.max_steps = 140
         self.p = bullet_client.BulletClient(connection_mode=p.GUI if gui else p.DIRECT)
         self.p.setGravity(0, 0, -9.81)
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
@@ -178,6 +178,7 @@ class Env(gym.Env):
         gripper = np.array([0, 0])
         angle_now = np.hstack([fr5_joint_angles, gripper])
         reward = self.reward(self)
+        
         # TEST
         # if self.step_num <= self.target_step:
         #     reward = 0

@@ -20,7 +20,7 @@ def main(algorithm):
             score += env.success_reward
 
             # Check if the episode has ended
-            done = (env.terminated or env.truncated)
+            done = env.terminated
 
         total_steps += env.step_num
         total_distance += env.get_dis()

@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import torch
 
 #DH参数
 a=[0 , -0.425 , -0.395 ,0 , 0 , 0]
@@ -28,14 +29,6 @@ class Calc:
     def PositiveKine(self,n_angle=[1, 1, 1, 1, 1, 1], i=6):   #正运动学求解
         global a, theta, d, alpha
         theta = math.pi*(2*n_angle-1)
-        # T1=transferQue(0,1)
-        # T2=transferQue(1,2)
-        # T3=transferQue(2,3)
-        # T4=transferQue(3,4)
-        # T5=transferQue(4,5)
-        # T6=transferQue(5,6)
-        # T7=T1.dot(T2).dot(T3).dot(T4).dot(T5).dot(T6)
-        # print(T7)
         T = [0]*7
         T[1] = self.transferQue(0,1)
         T[2] = T[1].dot(self.transferQue(1,2))
@@ -47,13 +40,64 @@ class Calc:
 
     def LastPos(self,n_angle):
         a = self.PositiveKine(n_angle)
-        return np.array([-a[0][3], -a[1][3], a[2][3]])
+        pp = np.array([-a[0][3], -a[1][3], a[2][3]])
+        return 2.5 * pp - 1.5 * self.WristPos(n_angle)
+    
+    def transferQue_torch(self, i, j, theta):      #齐次变换方程
+        global a, d
+        alpha = torch.tensor([torch.pi/2 , 0, 0, torch.pi/2 , -torch.pi/2 , 0])
+        c1 = torch.cos(theta[j-1])
+        s1 = torch.sin(theta[j-1])
+        c2 = torch.cos(alpha[j-1])
+        s2 = torch.sin(alpha[j-1])
+        # print(c2, ',', s2)
+        dd = torch.tensor(d[j-1])
+        aa = torch.tensor(a[j-1])
+        A2 = torch.tensor([[c1, -s1*c2, s1*s2, aa*c1],
+                    [s1, c1*c2, -c1*s2, aa*s1], 
+                    [0, s2, c2, dd], 
+                    [0, 0, 0, 1]], dtype=torch.float32)
+        # print('A2', A2)
+        A = torch.mul(c1, torch.tensor([[1, 0, 0, aa],[0, c2, -s2, 0], [0, 0, 0, 0], [0, 0, 0, 0]])) + torch.mul(s1, torch.tensor([[0, -c2, s2, 0], [1, 0, 0, aa], [0, 0, 0, 0], [0, 0, 0, 0]])) + torch.tensor([[0, 0, 0, 0], [0, 0, 0, 0], [0, s2, c2, dd], [0, 0, 0, 1]])
+        # print('A', j, ':', A)
+        return A
 
+
+    def PositiveKine_torch(self, n_angle, i=6):   #正运动学求解
+        global a, d, alpha
+        theta = torch.pi*(2*n_angle-1)
+        T = [0]*7
+        T[1] = self.transferQue_torch(0, 1, theta)
+        T[2] = torch.mm(T[1], self.transferQue_torch(1,2, theta))
+        T[3] = torch.mm(T[2], self.transferQue_torch(2,3, theta))
+        T[4] = torch.mm(T[3], self.transferQue_torch(3,4, theta))
+        T[5] = torch.mm(T[4], self.transferQue_torch(4,5, theta))
+        T[6] = torch.mm(T[5], self.transferQue_torch(5,6, theta))
+        return T[i]
+
+    def LastPos_torch(self, n_angle):
+        global d
+        T = self.PositiveKine_torch(n_angle)
+        # print(T)
+        # pp = torch.tensor([-a[0][3], -a[1][3], a[2][3]])
+        T = T.t()
+        pp = torch.mul(T[3][0:3], torch.tensor([-1, -1, 1]))
+        # print('n_angle', n_angle)
+        # print('pp', pp)
+        return pp + 1.5 * torch.mul(torch.mul(T[2][0:3], d[5]),torch.tensor([-1, -1, 1]))
+    
     def WristPos(self,n_angle):
         global a, theta, d, alpha
         T=self.PositiveKine(n_angle)
         # print(T[0][3],T[1][3],T[2][3])
         pw=np.array([-(T[0][3]-d[5]*T[0][2]), -(T[1][3]-d[5]*T[1][2]), T[2][3]-d[5]*T[2][2]])
+        return pw
+
+    def WristPos_torch(self,n_angle):
+        global a, theta, d, alpha
+        T=self.PositiveKine_torch(n_angle)
+        T = T.t()
+        pw = torch.mul(T[3][0:3], torch.tensor([-1, -1, 1])) - torch.mul(T[2][0:3], d[5])
         return pw
 
     def jointPos(self,n_angle): # 18
@@ -169,4 +213,4 @@ class Calc:
         d4=self.disjo(p4,p5,ob)
         d5=self.disjo(p5,p6,ob)
         x = np.min([d1,d2,d3,d4,d5])
-        print(x)
+        return x
