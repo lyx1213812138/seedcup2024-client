@@ -7,8 +7,9 @@ import os
 # from env.utils import relative_dir, predict_pos, next_tar_step
 # from env.ccalc import Calc
 import torch
+from queue import PriorityQueue
 
-#DH参数
+    #DH参数
 a=[0 , -0.425 , -0.395 ,0 , 0 , 0]
 theta=[0 , 0 , 0 , 0 , 0 , 0]
 d=[0.152 , 0 , 0 , 0.102 , 0.102 , 0.100]
@@ -45,6 +46,8 @@ class Calc:
         return T[i]
 
     def LastPos(self,n_angle):
+        if not isinstance(n_angle, np.ndarray):
+            n_angle = np.array(n_angle)
         a = self.PositiveKine(n_angle)
         pp = np.array([-a[0][3], -a[1][3], a[2][3]])
         return 2.5 * pp - 1.5 * self.WristPos(n_angle)
@@ -116,24 +119,6 @@ class Calc:
         # print("all joint pos", a, a.shape)
         return a
 
-    # def collisionAngle(self,now_angle):         #判断是否碰撞
-    #     theta2=now_angle[1]
-    #     theta3=now_angle[2]
-    #     l1=0.425
-    #     l2=0.395
-    #     R=0.1
-    #     x=0.6
-    #     w=0.08
-    #     theta2L=-math.asin((2*R+w)/2*x)
-    #     theta2H=math.asin((2*R+w)/2*x)
-    #     m=math.sqrt((l1*math.sin(theta2))**2+(x-l1*math.cos(theta2))**2)
-    #     theta3L=math.acos((l1**2+m**2-x**2)/(2*l1*m))-math.asin((w+2*R)/(2*m))-math.pi
-    #     theta3H=math.acos((l1**2+m**2-x**2)/(2*l1*m))+math.asin((w+2*R)/(2*m))-math.pi
-    #     if theta2<theta2H and theta2>theta2L:
-    #         return True
-    #     if theta3<theta3H and theta3>theta3L:
-    #         return True
-    #     return False
 
     def near_obs(self,my_obs, hand_obs_dis, if_print=False) -> float:
         near_r = 0.1 # param 球边离关节中心的距离
@@ -185,41 +170,65 @@ class Calc:
         # action[5] && z
         a_t_n3 = -60*(t[2]**4)+51.3333*(t[2]**3)-15.65*(t[2]**2)+2.161*t[2]-0.045
         return np.array([a_t_n, a_t_n3, 0.40097904, 0.04461199 - a_t_n3 + 0.07, a_t_n2, 0.5])
-    
+
     def disjo(self,j1,j2,ob):
-        s=np.array([j1[0]-j2[0], j1[1]-j2[1], j2[2]-j2[2]])
-        v=np.array([ob[0]-j2[0], ob[1]-j2[1], ob[2]-j2[2]])
-        d=np.linalg.norm((np.cross(s,v)))/math.sqrt(s[0]**2+s[1]**2+s[2]**2)
+        AP = ob - j1
+        AB = j2 - j1
+        t = np.dot(AP,AB)/np.dot(AB,AB)
+        t = max(0, min(1,t))
+        Q = j1 + t*AB
+        d=np.linalg.norm(ob - Q)
         return d
     
-    def collisionAngle(self,n_angle,ob):         #判断是否碰撞
+    def collisionAngle(self,n_angle,ob, dis_ob=None):         #判断是否碰撞
         global theta
         theta = math.pi*(2*n_angle-1)
-        T1=self.transferQue(0,1)
-        T2=self.transferQue(1,2)
-        T3=self.transferQue(2,3)
-        T4=self.transferQue(3,4)
-        T5=self.transferQue(4,5)
-        T6=self.transferQue(5,6)
-        T11=T1
-        T22=T1.dot(T2)
-        T33=T1.dot(T2).dot(T3)
-        T44=T1.dot(T2).dot(T3).dot(T4)
-        T55=T1.dot(T2).dot(T3).dot(T4).dot(T5)
-        T66=T1.dot(T2).dot(T3).dot(T4).dot(T5).dot(T6)
-        p1=np.array([-T11[0][3], -T11[1][3], T11[2][3]])
-        p2=np.array([-T22[0][3], -T22[1][3], T22[2][3]])
-        p3=np.array([-T33[0][3], -T33[1][3], T33[2][3]])
-        p4=np.array([-T44[0][3], -T44[1][3], T44[2][3]])
-        p5=np.array([-T55[0][3], -T55[1][3], T55[2][3]])
-        p6=np.array([-T66[0][3], -T66[1][3], T66[2][3]])
-        d1=self.disjo(p1,p2,ob)
-        d2=self.disjo(p2,p3,ob)
-        d3=self.disjo(p3,p4,ob)
-        d4=self.disjo(p4,p5,ob)
-        d5=self.disjo(p5,p6,ob)
-        x = np.min([d1,d2,d3,d4,d5])
-        return x
+        T1= self.transferQue(0,1)
+        T2 = T1.dot(self.transferQue(1,2))
+        T3 = T2.dot(self.transferQue(2,3))
+        T4 = T3.dot(self.transferQue(3,4))
+        T5 = T4.dot(self.transferQue(4,5))
+        T6 = T5.dot(self.transferQue(5,6))
+        p1=np.array([-T1[0][3], -T1[1][3], T1[2][3]])
+        p2=np.array([-T2[0][3], -T2[1][3], T2[2][3]])
+        p3=np.array([-T3[0][3], -T3[1][3], T3[2][3]])
+        p4=np.array([-T4[0][3], -T4[1][3], T4[2][3]])
+        p5=np.array([-T5[0][3], -T5[1][3], T5[2][3]])
+        p6=np.array([-T6[0][3], -T6[1][3], T6[2][3]])
+        p8 = self.LastPos(n_angle)
+        p9 = np.array([-0.138*math.sin(theta[0]), 0.138*math.cos(theta[0]), p1[2]])
+        p7=np.array([p2[0]+p9[0]-p1[0], p2[1]+p9[1]-p1[1], p2[2]+p9[2]-p1[2]])
+        d1=self.disjo(p9,p7,ob)
+        d2=self.disjo(p7,p2,ob)
+        d3=self.disjo(p2,p3,ob)
+        d4=self.disjo(p3,p4,ob)
+        d5=self.disjo(p4,p5,ob)
+        d6=self.disjo(p5,p6,ob)
+        d7=self.disjo(p6,p8,ob)
+        d8=np.linalg.norm(p3 - ob)
+        d9=np.linalg.norm(p4 - ob)
+        d10=np.linalg.norm(p5 - ob)
+        d11=np.linalg.norm(p8 - ob)
+        d12=np.linalg.norm(p7 - ob)
+    
+        if min(d1,d2) < 0.15 or d3 < 0.165:
+            return True
+        if min(d4, d5, d6) < 0.155:
+            return True
+        if min(d9, d12) < 0.169 or d8 < 0.18:
+            return True
+        if d7 < 0.18:
+            # print("&",d7)
+            return True
+        if min(d10, d11) < 0.178:
+            return True
+        if d6 < 0.165:
+            return True
+        if min(p1[2], p2[2], p3[2], p4[2], p5[2], p6[2], p7[2], p8[2], p9[2]) < 0.025:
+            return True
+        if dis_ob != None:
+            dis_ob[tuple(n_angle)] = min(min(d1,d2,d3) - 0.15, min(d4, d5, d6) - 0.155, min(d8, d9, d12) - 0.169, d7 - 0.18, min(d10, d11) - 0.178, d6 - 0.165, min(p1[2], p2[2], p3[2], p4[2], p5[2], p6[2], p7[2], p8[2], p9[2]) - 0.015)
+        return False
     
 calc = Calc()
 
@@ -281,16 +290,11 @@ class BaseAlgorithm(ABC):
 
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
-        path_right = os.path.join(os.path.dirname(__file__), "left_model.zip")
-        path_left = os.path.join(os.path.dirname(__file__), "right_model.zip")
-        # path_tot = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_47/test/best_model.zip")
-        # path_end = os.path.join(os.path.dirname(__file__), "model/ppo_eval_logs_18/end2_x_g_0_left/best_model.zip")
-        # print("ppo load path: ", path_tot, path_end)
+        path_right = os.path.join(os.path.dirname(__file__), "right_model.zip")
+        path_left = os.path.join(os.path.dirname(__file__), "left_model.zip")
         sleep(1)
         self.model_r = PPO.load(path_right, device="cpu")
         self.model_l = PPO.load(path_left, device="cpu")
-        # self.model = PPO.load(path_tot, device="cpu")
-        # self.model_end = PPO.load(path_end, device="cpu")
         
         self.flag = 0
         self.vx = 0 
@@ -300,7 +304,7 @@ class MyCustomAlgorithm(BaseAlgorithm):
         self.n_obs = [0, 0, 0]
 
         self.max_steps = 200
-        self.target_step = 94 # 未来目标位置的步数
+        self.target_step = 120 # 未来目标位置的步数
 
 
     # v : [vx, vz]
@@ -320,7 +324,7 @@ class MyCustomAlgorithm(BaseAlgorithm):
         return now_tar_pos
             
     def get_action(self, observation):
-        # set_ball_pos = observation[1]
+        # self.set_ball_pos = observation[1]
         # observation = observation[0]
         n_angle = observation[0, :6]
         target_position = observation[0][6:9]
@@ -345,10 +349,16 @@ class MyCustomAlgorithm(BaseAlgorithm):
             self.last_dis = -1
             return np.array([0, 0, 0, 0, 0, 0])
         if self.flag == 1:
+            # init
             self.vx = target_position[0]-self.st[0]
             self.vz = target_position[2]-self.st[2]
             self.end_tar = predict_pos(self.st, [self.vx * 12, self.vz * 12], self.max_steps)
             self.target = predict_pos(self.st, [self.vx * 12, self.vz * 12], self.target_step)
+            self.path = []
+            # if np.linalg.norm(self.target - obstacle1_position) > 0.3:
+            #     self.target_step = 70
+            #     self.target = predict_pos(self.st, [self.vx * 12, self.vz * 12], self.target_step)
+            #     print('be quick')
             self.dir_future = relative_dir(
                 {'x': self.target[0], 'y': self.target[2]},
                 {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
@@ -359,37 +369,45 @@ class MyCustomAlgorithm(BaseAlgorithm):
                 {'x': obstacle1_position[0], 'y': obstacle1_position[1]}, 
                 True
             )
-            if np.linalg.norm(self.target - obstacle1_position) > 0.3 and (self.dir_future != 0 or obstacle1_position[2]<=0.2):
-                self.target_step = 70
-                self.target = predict_pos(self.st, [self.vx * 12, self.vz * 12], self.target_step)
-                print('be quick')
+            if self.dir_end * self.dir_future < -0.5:
+                self.target_step = 170
             print("dir", self.dir_future, self.dir_end)
+            self.now_state = 1 # 0: RL, 1: A*, 2: torch
+            self.init_state = 1
             self.flag = -1
             return np.array([0, 0, 0, 0, 0, 0])
         if self.flag == -1:
             # TODO 如果方向不一致, 改变目标
-            if self.num <= self.target_step and self.dir_future == self.dir_end:
-                real_target = self.target
-                real_dir = self.dir_future
-            elif self.dir_future != self.dir_end:
-                real_target = self.end_tar
-                real_dir = self.dir_end
-            elif self.num > self.target_step:
-                real_target = target_position 
-                real_dir = self.dir_end
+            # if self.num <= self.target_step and self.dir_future == self.dir_end:
+            #     real_target = self.target
+            #     real_dir = self.dir_future
+            # elif self.dir_future != self.dir_end:
+            #     real_target = self.end_tar
+            #     real_dir = self.dir_end
+            # elif self.num > self.target_step:
+            #     real_target = target_position 
+            #     real_dir = self.dir_end
+            # print(np.linalg.norm(target_position - obstacle1_position))
+            # if np.linalg.norm(self.target - obstacle1_position) < 0.23 or (self.dir_future == 0 and self.dir_end != 0):
+            #     real_target = self.end_tar
+            #     real_dir = self.dir_end
+            #     self.target_step = 130
+            # else:
+            real_target = self.target
+            real_dir = self.dir_future
 
             # print(self.num, target_position)
-            if self.num == self.target_step:
-                if np.linalg.norm(np.array(target_position) - np.array(self.target)) > 0.01:
-                    print('!target',self.target, '\n\t', target_position)
-                    exit(1)
-            elif self.num == self.max_steps-1:
-                if np.linalg.norm(np.array(target_position) - np.array(self.end_tar)) > 0.01:
-                    print('!end',self.end_tar, '\n\t', target_position)
-                    exit(1)
+            # if self.num == self.target_step:
+            #     if np.linalg.norm(np.array(target_position) - np.array(self.target)) > 0.01:
+            #         print('!target',self.target, '\n\t', target_position)
+            #         exit(1)
+            # elif self.num == self.max_steps-1:
+            #     if np.linalg.norm(np.array(target_position) - np.array(self.end_tar)) > 0.01:
+            #         print('!end',self.end_tar, '\n\t', target_position)
+            #         exit(1)
 
-            # if set_ball_pos != None:
-            #     set_ball_pos(calc.LastPos(n_angle))
+            # if self.set_ball_pos != None:
+            #     self.set_ball_pos(calc.LastPos(n_angle))
                 # set_ball_pos(target_angle)
             my_obs = np.hstack((
                 n_angle, real_target, obstacle1_position,
@@ -408,25 +426,78 @@ class MyCustomAlgorithm(BaseAlgorithm):
         
             obs_angle = np.arctan2(obstacle1_position[1], obstacle1_position[0])
             target_angle = np.arctan2(target_position[1], target_position[0])
-            if self.num == self.target_step:
-                print("change model")
 
-
-
-            if self.num <= self.target_step:
+            action = [0] * 6
+            
+            change_target_step = self.target_step 
+            a_star_target_step = self.target_step + 25
+            if self.now_state == 0:
                 if real_dir >= 0:
                     action, _ = self.model_r.predict(my_obs[:,:42])
                 else:
                     action, _ = self.model_l.predict(my_obs[:,:42])
-            else:
-                # action, _ = self.model_end.predict(my_obs2)  
+                # if calc.collisionAngle(n_angle + action, obstacle1_position):
+                #     action = -action
+                #     self.now_state = 1
+                #     self.init_state = 1
+                if self.num > 10:
+                    self.now_state = 1
+                    self.init_state = 1
+            elif self.now_state == 1:
+                action_tri = np.array(self.traditional_get_action(my_obs2))
+                if np.linalg.norm(calc.LastPos(n_angle) - predict_pos(target_position, [self.vx * 12, self.vz * 12], 1)) <= 0.05 and not calc.collisionAngle(n_angle + action_tri / 360, obstacle1_position):
+                    print('use last triditional')
+                    return action_tri
+
+                if not self.init_state and np.linalg.norm(self.path[self.now_tar_idx] - n_angle) < 0.003:
+                    self.now_tar_idx = self.now_tar_idx + 1
+                    if self.now_tar_idx >= len(self.path):
+                        self.now_state = 1
+                        self.init_state = 1
+                    
+                if self.init_state:
+                    self.init_state = 0
+                    print('start A*', self.num)
+                    real_target = predict_pos(target_position, [self.vx * 12, self.vz * 12], max(1, self.target_step - self.num))
+                    next_target = predict_pos(target_position, [self.vx * 12, self.vz * 12], max(6, self.target_step - self.num + 20))
+                    self.path = self.a_star(n_angle, real_target, obstacle1_position, nxt=next_target, mxstep=max(1, self.target_step - self.num))
+                    self.now_tar_idx = 0
+
+                if self.path == None: # go to traditional
+                    print('no path, go to traditional', self.num)
+                    self.now_state = 2
+                    self.init_state = 1
+                    return np.zeros(6)
+
+                action = np.array(self.path[self.now_tar_idx] - n_angle) * 360 / max(np.max(np.abs(self.path[self.now_tar_idx] - n_angle)) * 360, 1)
+
+                if calc.collisionAngle(n_angle + action / 360, obstacle1_position):
+                    now_target = self.path[self.now_tar_idx]
+                    self.path = self.a_star_step(n_angle, now_target, obstacle1_position, 1/360) + self.path[self.now_tar_idx:]
+                    self.now_tar_idx = 1
+                    if self.path == None:
+                        print('no path, go to traditional', self.num)
+                        self.now_state = 2
+                        self.init_state = 1
+                        return np.zeros(6)
+                    action = np.array(self.path[self.now_tar_idx] - n_angle) * 360 / max(np.max(np.abs(self.path[self.now_tar_idx] - n_angle)) * 360, 1)
+
+                # if self.num >= self.max_steps - 15:
+                #     self.now_state = 2
+                #     self.init_state = 1
+
+            elif self.now_state == 2:
+                if self.init_state:
+                    self.init_state = 0
+                    print('traditional')
                 action = self.traditional_get_action(my_obs2)
-                if torch.all(action == 0):
-                    if real_dir >= 0:
-                        action, _ = self.model_r.predict(my_obs[:,:42])
-                    else:
-                        action, _ = self.model_l.predict(my_obs[:,:42])
-            
+                if calc.collisionAngle(n_angle + np.array(action) / 360, obstacle1_position):
+                    print('traditional collision')
+                    self.now_state = 1
+                    self.init_state = 1
+                    return np.zeros(6)
+                    
+            # print('action:', action)
             return np.reshape(action, (6, ))
 
     def traditional_get_action(self, observation):
@@ -451,5 +522,151 @@ class MyCustomAlgorithm(BaseAlgorithm):
         n_angle_tensor.grad.zero_()
         # print(action)
         return action
+
+    def a_star(self, start, tarpos, obspos, nxt=None, mxstep=1000):
+        """
+        Args:
+            start: list of 6 : angles
+            tarpos: list of 3 : position 
+
+        Space:
+            360 ^ 6
+        """
+        start = np.array(start)
+        q = PriorityQueue()
+        g = {} # g[ang] = 已走过的步数
+        pre = {} # pre[ang] = 上一个状态
+        lp = {} # lp[ang] = lastpos(ang)
+        dis_ob = {}
+        g[tuple(start)] = 0
+        pre[tuple(start)] = None
+        lp[tuple(start)] = calc.LastPos(start)
+        calc.collisionAngle(start, obspos, dis_ob)
+        print('start', start, dis_ob.get(tuple(start), -1))
+        total_cnt = 0
+        
+        q.put((self.h(lp[tuple(start)], tarpos),) + tuple(start))
+        while not q.empty():
+            cur = q.get()[1:7]
+            if tuple(cur) not in lp:
+                lp[tuple(cur)] = calc.LastPos(cur)
+            curpos = lp[tuple(cur)]
+            # print(cur)
+            # self.set_ball_pos(curpos)
+
+            dis = np.linalg.norm(curpos - tarpos)
+            now_dis_ob = dis_ob.get(tuple(cur), -1)
+            # print(dis, now_dis_ob)
+            total_cnt += 1
+            if dis < 0.05 or (total_cnt > 30 and dis < 0.12):
+                return self.find_path(pre, cur)
+            if total_cnt > 50:
+                return self.find_path(pre, cur)
+            
+            if min(dis, now_dis_ob) > 0.3:
+                step_len = 0.02
+            elif now_dis_ob < 0.05 or dis < 0.15:
+                step_len = 0.01
+            elif dis < 0.07:
+                step_len = 1/360
+            elif now_dis_ob < 0.01:
+                step_len = 1/360/5
+            else:
+                step_len = 0.01
+
+            new_g = g[tuple(cur)] + 1
+            # if new_g > mxstep:
+            #     print('next')
+            #     return self.a_star(start, nxt, obspos)
+            i = [0] * 6
+            for i[0] in range(-1, 2):
+                for i[1] in range(-1, 2):
+                    for i[2] in range(-1, 2):
+                        for i[4] in range(-1, 2):
+                            new_ang = np.array([cur[j] + i[j] * step_len for j in range(6)])
+                            if tuple(new_ang) == tuple(cur):
+                                continue
+                            if tuple(new_ang) not in g and self.not_valid(new_ang, obspos, dis_ob):
+                                continue
+                            if tuple(new_ang) not in g or new_g < g[tuple(new_ang)]:
+                                g[tuple(new_ang)] = new_g
+                                pre[tuple(new_ang)] = cur
+                                if tuple(new_ang) not in lp:
+                                    lp[tuple(new_ang)] = calc.LastPos(new_ang)
+                                q.put((new_g + self.h(lp[tuple(new_ang)], tarpos),) + tuple(new_ang))
+        return None
+
+    def a_star_step(self, start, tarang, obspos, minsteplen = 100):
+        """
+        Args:
+            start: list of 6 : angles
+            tarpos: list of 6 : target_angle 
+
+        Space:
+            360 ^ 6
+        """
+        def h(a, b):
+            a = np.array(a)
+            b = np.array(b)
+            return np.max(np.abs(a - b))
+        
+        start = np.array(start)
+        q = PriorityQueue()
+        g = {} # g[ang] = 已走过的步数
+        pre = {} # pre[ang] = 上一个状态
+        dis_ob = {}
+        g[tuple(start)] = 0
+        pre[tuple(start)] = None
+        calc.collisionAngle(start, obspos, dis_ob)
+        print('start', start, dis_ob.get(tuple(start), -1))
+        total_cnt = 0
+        
+        q.put((h(start, tarang),) + tuple(start))
+        while not q.empty():
+            cur = q.get()[1:7]
+
+            now_dis_ob = dis_ob.get(tuple(cur), -1)
+            total_cnt += 1
+            if h(start, tarang) <= 1 or total_cnt > 50:
+                return self.find_path(pre, cur)
+            
+            step_len = minsteplen
+            if now_dis_ob < 0.01:
+                step_len = 1/360/3
+
+            new_g = g[tuple(cur)] + 1
+            i = [0] * 6
+            for i[0] in range(-1, 2):
+                for i[1] in range(-1, 2):
+                    for i[2] in range(-1, 2):
+                        for i[4] in range(-1, 2):
+                            new_ang = np.array([cur[j] + i[j] * step_len for j in range(6)])
+                            if tuple(new_ang) == tuple(cur):
+                                continue
+                            if tuple(new_ang) not in g and self.not_valid(new_ang, obspos, dis_ob):
+                                continue
+                            if tuple(new_ang) not in g or new_g < g[tuple(new_ang)]:
+                                g[tuple(new_ang)] = new_g
+                                pre[tuple(new_ang)] = cur
+                                q.put((new_g + h(new_ang, tarang),) + tuple(new_ang))
+        return None     
+
+    def h(self, lastpos, tarpos): 
+        dis_per_step = 0.007
+        return np.linalg.norm(lastpos - tarpos) / dis_per_step
+    
+
+    def not_valid(self, ang, obspos, dis_ob):
+        if not isinstance(ang, np.ndarray):
+            ang = np.array(ang)
+        return calc.collisionAngle(ang, obspos, dis_ob)
+    
+
+    def find_path(self, premap, end):
+        path = []
+        while end != None:
+            path.append(end)
+            end = premap[end]
+        return path[::-1]
 
         

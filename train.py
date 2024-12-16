@@ -16,7 +16,7 @@ n_training_envs = 3
 n_eval_envs = 5
 
 # Create log dir where evaluation results will be saved
-eval_log_dir = "./ppo_eval_logs_42/right"
+eval_log_dir = "./ppo_eval_logs_42/left"
 print('log path:', eval_log_dir)
 os.makedirs(eval_log_dir, exist_ok=True)
 

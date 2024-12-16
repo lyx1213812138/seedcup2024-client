@@ -15,7 +15,7 @@ from team_algorithm import MyCustomAlgorithm
 calc = Calc()
 
 class Env(gym.Env):
-    def __init__(self,is_senior=False,seed=423, gui=False, pos='all'):
+    def __init__(self,is_senior=False,seed=423, gui=False, pos='left'):
         super().__init__()
         self.reward = reward
         self.pos = pos

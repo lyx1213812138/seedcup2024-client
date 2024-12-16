@@ -1,8 +1,10 @@
 from std_env import Env
-from zip.team_algorithm import MyCustomAlgorithm
+from zipp.team_algorithm import MyCustomAlgorithm
+from datetime import datetime
 
 def main(algorithm):
-    env = Env(is_senior=False,seed=122,gui=True)
+    now = datetime.now()
+    env = Env(is_senior=False,seed=112,gui=True)
     done = False
     num_episodes = 100
     final_score = 0
@@ -27,6 +29,9 @@ def main(algorithm):
         final_score += score
 
         print(f"Test_{i} completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", score)
+        # if score < 70:
+        #     from time import sleep
+        #     sleep(10000)
 
     final_score /= num_episodes
     avg_distance = total_distance / num_episodes
@@ -35,6 +40,7 @@ def main(algorithm):
     # After exiting the loop, get the total steps and final distance
     print("Test completed. Total steps:", avg_steps, "Final distance:", avg_distance, "Final score:", final_score)
     env.close()
+    print("Time:", datetime.now()-now)
 
 if __name__ == "__main__":
     algorithm = MyCustomAlgorithm()

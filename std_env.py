@@ -8,6 +8,7 @@ from scipy.spatial.transform import Rotation as R
 from env.utils import predict_pos, relative_dir
 from env.ccalc import Calc
 import random
+from time import sleep
 
 calc = Calc()
 
@@ -28,7 +29,7 @@ class Env:
         self.init_env()
 
     def init_env(self):
-        np.random.seed(self.seed)  
+        # np.random.seed(self.seed)  
         self.fr5 = self.p.loadURDF("fr5_description/urdf/fr5v6.urdf", useFixedBase=True, basePosition=[0, 0, 0],
                                    baseOrientation=p.getQuaternionFromEuler([0, 0, np.pi]), flags=p.URDF_USE_SELF_COLLISION)
         self.table = self.p.loadURDF("table/table.urdf", basePosition=[0, 0.5, -0.63],
@@ -53,6 +54,7 @@ class Env:
         self.goalz = np.random.uniform(0.1, 0.3, 1)
         self.target_position = [self.goalx[0], self.goaly[0], self.goalz[0]]
         self.obstacle1_position = [(np.random.uniform(-0.2, 0.2, 1) + self.goalx[0])[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
+        # self.obstacle1_position = [(np.random.uniform(-0.2, 0.2, 1) + self.goalx[0])[0], 0.6, np.random.uniform(0.3, 0.3, 1)]
         self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
         # TEST
         # if self.random_velocity[0] > 0:
@@ -111,8 +113,8 @@ class Env:
         func = lambda pos : self.p.resetBasePositionAndOrientation(self.my_ball, pos, [0, 0, 0, 1])
         # func(self.p.getLinkState(self.fr5, 3)[0])
         self.observation = np.hstack((obs_joint_angles, target_position, obstacle1_position)).flatten().reshape(1, -1)
-        return (self.observation, func)
-        # return self.observation
+        # return (self.observation, func)
+        return self.observation
 
     def step(self, action):
         if self.terminated:
@@ -170,7 +172,8 @@ class Env:
             link_index = contact_point[3]
             if link_index not in [0, 1]:
                 self.obstacle_contact = True
-                # print("obstacle_contact")
+                print("obstacle_contact")
+                # sleep(1000)
 
         # 计算奖励
         if self.get_dis() < 0.05 and self.step_num <= self.max_steps:

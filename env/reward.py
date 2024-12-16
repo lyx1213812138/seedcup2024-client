@@ -9,7 +9,7 @@ def reward(self) -> float:
 
     # XXX 计算距离reward
     obs = self.get_observation()
-    total_dis = self.get_dis()
+    total_dis = self.get_dis() + np.linalg.norm(obs[0][36:42] - obs[0][0:6])
     # print('total_dis: ', total_dis)
     if self.last_dis >= 0:
         reward += 500*(self.last_dis - total_dis)
@@ -35,9 +35,9 @@ def reward(self) -> float:
         if link_index not in [0, 1]:
             if not self.obstacle_contact:
                 # XXX contact
-                reward = +100 # XXXXXXXXXX
+                reward = -100 # XXXXXXXXXX
                 self.obstacle_contact = True
-            reward = +3 # XXXXXXXXXX
+            reward = -15 # XXXXXXXXXX
 
     # 计算结束
     # TEST
@@ -69,7 +69,7 @@ def reward(self) -> float:
     if end_reach or end_max_steps:
         if end_reach: # XXX reach target
             if self.obstacle_contact:
-                reward = 150
+                reward = -150
             else:
                 reward = 200
             print("# Terminated for reaching target")

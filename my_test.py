@@ -1,5 +1,5 @@
 from std_env import Env
-from team_algorithm import MyCustomAlgorithm 
+from zip.team_algorithm import MyCustomAlgorithm 
 import numpy as np
 from time import sleep, time
 from pynput import keyboard
@@ -12,7 +12,7 @@ pause = False
 
 def main(algorithm):
     global pause, env
-    env = Env(is_senior=False,seed=444,gui=True)
+    env = Env(is_senior=False,seed=244,gui=True)
     done = False
     printed = True
     while True:

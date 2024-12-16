@@ -39,6 +39,8 @@ class Calc:
         return T[i]
 
     def LastPos(self,n_angle):
+        if not isinstance(n_angle, np.ndarray):
+            n_angle = np.array(n_angle)
         a = self.PositiveKine(n_angle)
         pp = np.array([-a[0][3], -a[1][3], a[2][3]])
         return 2.5 * pp - 1.5 * self.WristPos(n_angle)
@@ -110,24 +112,6 @@ class Calc:
         # print("all joint pos", a, a.shape)
         return a
 
-    # def collisionAngle(self,now_angle):         #判断是否碰撞
-    #     theta2=now_angle[1]
-    #     theta3=now_angle[2]
-    #     l1=0.425
-    #     l2=0.395
-    #     R=0.1
-    #     x=0.6
-    #     w=0.08
-    #     theta2L=-math.asin((2*R+w)/2*x)
-    #     theta2H=math.asin((2*R+w)/2*x)
-    #     m=math.sqrt((l1*math.sin(theta2))**2+(x-l1*math.cos(theta2))**2)
-    #     theta3L=math.acos((l1**2+m**2-x**2)/(2*l1*m))-math.asin((w+2*R)/(2*m))-math.pi
-    #     theta3H=math.acos((l1**2+m**2-x**2)/(2*l1*m))+math.asin((w+2*R)/(2*m))-math.pi
-    #     if theta2<theta2H and theta2>theta2L:
-    #         return True
-    #     if theta3<theta3H and theta3>theta3L:
-    #         return True
-    #     return False
 
     def near_obs(self,my_obs, hand_obs_dis, if_print=False) -> float:
         near_r = 0.1 # param 球边离关节中心的距离
@@ -179,38 +163,61 @@ class Calc:
         # action[5] && z
         a_t_n3 = -60*(t[2]**4)+51.3333*(t[2]**3)-15.65*(t[2]**2)+2.161*t[2]-0.045
         return np.array([a_t_n, a_t_n3, 0.40097904, 0.04461199 - a_t_n3 + 0.07, a_t_n2, 0.5])
-    
+
     def disjo(self,j1,j2,ob):
-        s=np.array([j1[0]-j2[0], j1[1]-j2[1], j2[2]-j2[2]])
-        v=np.array([ob[0]-j2[0], ob[1]-j2[1], ob[2]-j2[2]])
-        d=np.linalg.norm((np.cross(s,v)))/math.sqrt(s[0]**2+s[1]**2+s[2]**2)
+        AP = ob - j1
+        AB = j2 - j1
+        t = np.dot(AP,AB)/np.dot(AB,AB)
+        t = max(0, min(1,t))
+        Q = j1 + t*AB
+        d=np.linalg.norm(ob - Q)
         return d
     
-    def collisionAngle(self,n_angle,ob):         #判断是否碰撞
+    def collisionAngle(self,n_angle,ob, dis_ob=None):         #判断是否碰撞
         global theta
         theta = math.pi*(2*n_angle-1)
-        T1=self.transferQue(0,1)
-        T2=self.transferQue(1,2)
-        T3=self.transferQue(2,3)
-        T4=self.transferQue(3,4)
-        T5=self.transferQue(4,5)
-        T6=self.transferQue(5,6)
-        T11=T1
-        T22=T1.dot(T2)
-        T33=T1.dot(T2).dot(T3)
-        T44=T1.dot(T2).dot(T3).dot(T4)
-        T55=T1.dot(T2).dot(T3).dot(T4).dot(T5)
-        T66=T1.dot(T2).dot(T3).dot(T4).dot(T5).dot(T6)
-        p1=np.array([-T11[0][3], -T11[1][3], T11[2][3]])
-        p2=np.array([-T22[0][3], -T22[1][3], T22[2][3]])
-        p3=np.array([-T33[0][3], -T33[1][3], T33[2][3]])
-        p4=np.array([-T44[0][3], -T44[1][3], T44[2][3]])
-        p5=np.array([-T55[0][3], -T55[1][3], T55[2][3]])
-        p6=np.array([-T66[0][3], -T66[1][3], T66[2][3]])
-        d1=self.disjo(p1,p2,ob)
-        d2=self.disjo(p2,p3,ob)
-        d3=self.disjo(p3,p4,ob)
-        d4=self.disjo(p4,p5,ob)
-        d5=self.disjo(p5,p6,ob)
-        x = np.min([d1,d2,d3,d4,d5])
-        return x
+        T1= self.transferQue(0,1)
+        T2 = T1.dot(self.transferQue(1,2))
+        T3 = T2.dot(self.transferQue(2,3))
+        T4 = T3.dot(self.transferQue(3,4))
+        T5 = T4.dot(self.transferQue(4,5))
+        T6 = T5.dot(self.transferQue(5,6))
+        p1=np.array([-T1[0][3], -T1[1][3], T1[2][3]])
+        p2=np.array([-T2[0][3], -T2[1][3], T2[2][3]])
+        p3=np.array([-T3[0][3], -T3[1][3], T3[2][3]])
+        p4=np.array([-T4[0][3], -T4[1][3], T4[2][3]])
+        p5=np.array([-T5[0][3], -T5[1][3], T5[2][3]])
+        p6=np.array([-T6[0][3], -T6[1][3], T6[2][3]])
+        p8 = self.LastPos(n_angle)
+        p9 = np.array([-0.138*math.sin(theta[0]), 0.138*math.cos(theta[0]), p1[2]])
+        p7=np.array([p2[0]+p9[0]-p1[0], p2[1]+p9[1]-p1[1], p2[2]+p9[2]-p1[2]])
+        d1=self.disjo(p9,p7,ob)
+        d2=self.disjo(p7,p2,ob)
+        d3=self.disjo(p2,p3,ob)
+        d4=self.disjo(p3,p4,ob)
+        d5=self.disjo(p4,p5,ob)
+        d6=self.disjo(p5,p6,ob)
+        d7=self.disjo(p6,p8,ob)
+        d8=np.linalg.norm(p3 - ob)
+        d9=np.linalg.norm(p4 - ob)
+        d10=np.linalg.norm(p5 - ob)
+        d11=np.linalg.norm(p8 - ob)
+        # print(p1,p9,p7,p2,p3,p4,p5,p6,p8)
+        # print(d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11)
+        # print('5 ', d10)
+        # print('5 6', d6)
+        if min(d1,d2,d3) < 0.13:
+            # print("&", min(d1,d2,d3))
+            return True
+        if min(d4, d5, d6) < 0.16:
+            # print("&&", min(d4, d5, d6))
+            return True
+        if min(d8, d9, d10) < 0.19:
+            # print("&&&", min(d8, d9, d10))
+            return True
+        if min(d7,d8) < 0.20:
+            # print("&&&", d7)
+            return True
+        if dis_ob != None:
+            dis_ob[tuple(n_angle)] = min(min(d1,d2,d3) - 0.13, min(d4, d5, d6) - 0.16, min(d8, d9, d10) - 0.19, min(d7,d8) - 0.20)
+        return False
