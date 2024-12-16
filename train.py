@@ -16,8 +16,9 @@ n_training_envs = 3
 n_eval_envs = 5
 
 # Create log dir where evaluation results will be saved
-eval_log_dir = "./ppo_eval_logs_42/left"
-print('log path:', eval_log_dir)
+# eval_log_dir = "./ppo_eval_logs_47/end2"
+load_path = os.path.join(os.path.dirname(__file__),  "ppo_eval_logs_42/batch256/left_perfect/best_model.zip")
+eval_log_dir = os.path.join(os.path.dirname(__file__), "ppo_eval_logs_42/batch256/left_perfect/best_model2.zip")
 os.makedirs(eval_log_dir, exist_ok=True)
 
 # Initialize a vectorized training environment with default parameters
@@ -47,6 +48,8 @@ eval_callback = EvalCallback(eval_env, best_model_save_path=eval_log_dir,
 
 if len(sys.argv) > 1:
   load_path = sys.argv[1]
+  model = PPO.load(load_path, train_env, verbose=1, tensorboard_log='./tensorboard/')
+elif load_path:
   model = PPO.load(load_path, train_env, verbose=1, tensorboard_log='./tensorboard/')
 else:
   model = PPO("MlpPolicy", train_env, verbose=1, tensorboard_log='./tensorboard/', 
